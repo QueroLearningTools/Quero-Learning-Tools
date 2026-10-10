@@ -1,0 +1,76 @@
+/* Curriculum Manager: learning areas, topics, subtopics, skills, subjects, and year-level controls. */
+
+.curriculum-manager{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));grid-auto-rows:minmax(220px,1fr);gap:12px;min-height:0;flex:1;overflow:auto}
+
+.curriculum-column{border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-primary);padding:10px;display:flex;flex-direction:column;min-height:0}
+
+.curriculum-column-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+
+.curriculum-column-title{font-size:13px;font-weight:700;color:var(--color-text-secondary)}
+
+.curriculum-list{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0}
+
+.curriculum-item{border:0.5px solid var(--color-border-tertiary);border-radius:7px;background:var(--color-background-secondary);padding:8px 9px;text-align:left;font-size:13px;color:var(--color-text-primary);cursor:pointer}
+
+.curriculum-item.active{background:#eef2ff;border-color:#a5b4fc;color:#312e81;font-weight:700}
+
+.curriculum-item.empty{cursor:default;color:var(--color-text-tertiary);font-style:italic}
+
+.curriculum-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+.curriculum-actions .btn{padding:6px 8px}
+
+.curriculum-editor{display:flex;flex-direction:column;gap:10px;overflow:auto}
+
+.curriculum-check-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+
+.curriculum-check{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--color-text-primary);min-height:24px}
+
+.curriculum-check input{width:14px;height:14px}
+
+.curriculum-link-item{display:flex;align-items:center;gap:7px;border:0.5px solid var(--color-border-tertiary);border-radius:7px;background:var(--color-background-secondary);padding:8px 9px;font-size:13px;color:var(--color-text-primary);cursor:pointer}
+
+.curriculum-link-item input{width:14px;height:14px;flex:0 0 auto}
+
+.curriculum-link-item.checked{background:#eefdf3;border-color:#86efac;color:#166534;font-weight:700}
+
+.curriculum-link-item.active{outline:2px solid #c7d2fe}
+
+.curriculum-warning{display:flex;align-items:center;gap:6px;margin-top:7px;padding:7px 9px;border-radius:7px;background:#fff7ed;color:#9a3412;font-size:12px;border:0.5px solid #fed7aa}
+
+.curriculum-savebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+
+.curriculum-learning-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+
+.curriculum-learning-tab{border:0.5px solid var(--color-border-secondary);border-radius:999px;background:var(--color-background-primary);padding:7px 12px;font-size:13px;font-weight:700;color:var(--color-text-secondary);cursor:pointer}
+
+.curriculum-learning-tab.active{background:#eef2ff;border-color:#a5b4fc;color:#312e81}
+
+.curriculum-learning-tab.add{color:#166534;border-color:#86efac;background:#f0fdf4}
+
+.curriculum-learning-tab.danger{color:#b91c1c;border-color:#fecaca;background:#fff1f2}
+
+.curriculum-note{font-size:12px;color:var(--color-text-secondary)}
+
+.curriculum-subject-panel{border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-primary);padding:10px;margin-bottom:12px}
+
+.curriculum-subject-list{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+
+.curriculum-subject-chip{display:inline-flex;align-items:center;gap:6px;border:0.5px solid var(--color-border-tertiary);border-radius:999px;background:var(--color-background-secondary);padding:5px 8px;font-size:12px;color:var(--color-text-primary)}
+
+.curriculum-subject-chip button{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--color-text-secondary);padding:0;cursor:pointer}
+
+.curriculum-subject-chip button:hover{color:var(--color-primary)}
+
+.curriculum-youtube-item{width:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:3px;border:0.5px solid var(--color-border-tertiary);border-radius:7px;background:var(--color-background-secondary);padding:8px 9px;text-align:left;font-size:13px;color:var(--color-text-primary);cursor:pointer}
+.curriculum-youtube-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--color-text-primary);font-weight:600}
+.curriculum-youtube-item.active .curriculum-youtube-title{color:#312e81}
+
+
+.curriculum-youtube-form{border:0.5px solid #c7d2fe;border-radius:8px;background:#f8fbff;padding:9px;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.curriculum-youtube-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--color-text-secondary)}
+.curriculum-youtube-form input{height:34px;border:0.5px solid var(--color-border-secondary);border-radius:7px;background:#fff;padding:0 9px;font:400 13px/1.2 Arial,sans-serif;color:var(--color-text-primary);box-sizing:border-box;min-width:0}
+.curriculum-youtube-form input:focus{outline:2px solid #bfdbfe;border-color:#60a5fa}
+.curriculum-youtube-form-actions{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+
+

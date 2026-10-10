@@ -1,0 +1,51 @@
+/* Question Extractor: upload panel, extracted question cards, and extractor metadata controls. */
+
+.extractor-layout{display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(320px,1.1fr);gap:12px;min-height:0;flex:1}
+
+.extractor-panel{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);background:var(--color-background-primary);padding:12px;min-height:0;display:flex;flex-direction:column}
+
+.extractor-panel textarea{width:100%;flex:1;min-height:320px;resize:none;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px;font:14px/1.35 "Times New Roman",Times,serif;outline:none}
+
+.extractor-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+
+.extractor-preview-list{overflow:auto;min-height:0;padding-right:2px}
+
+.extractor-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px;margin-bottom:10px;background:#fff}
+
+.extractor-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+
+.extractor-card-title{font-weight:700;color:var(--color-text-primary);font-size:13px}
+
+.extractor-card textarea{width:100%;min-height:78px;resize:vertical;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px;font:13px/1.35 "Times New Roman",Times,serif}
+
+.extractor-option-grid{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+
+.extractor-option-grid input:not([type=radio]),.extractor-sub-option-input{width:100%;height:24px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:2px 8px;font-size:13px;font-family:"Times New Roman",Times,serif;line-height:18px;box-sizing:border-box;background:#fff}
+
+.extractor-meta-grid input,.extractor-meta-grid select{width:100%;height:24px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:2px 8px;font-size:13px;line-height:18px;box-sizing:border-box;background:#fff}
+
+.extractor-meta-grid .multi-select-button{height:24px;padding:2px 28px 2px 8px;font-size:13px;line-height:18px}
+
+.extractor-meta-grid .multi-select-button:after{right:10px;width:5px;height:5px;border-width:1.5px}
+
+.extractor-meta-grid .multi-select-menu{max-height:190px}
+
+.extractor-option-grid input[type=radio]{width:15px;height:15px;margin:0}
+
+.extractor-option-choice{border:0.5px solid var(--color-border-tertiary)}
+
+.extractor-option-choice:has(input[type=radio]:checked){background:#eef8ef;border-color:#b8e1bd}
+
+.extractor-meta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+
+.extractor-note{font-size:12px;color:var(--color-text-secondary);line-height:1.35;margin-top:8px}
+
+@media(max-width:980px){.extractor-layout{grid-template-columns:1fr}.extractor-meta-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.extractor-meta-grid select,
+.extractor-meta-grid .multi-select-button{
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  min-width:0;
+}

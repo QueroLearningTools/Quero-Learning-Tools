@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quero Learning Tools</title>
+<link rel="icon" type="image/png" href="app-logo.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="jszip.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/question-render.css">
+<link rel="stylesheet" href="css/exam-builder.css">
+<link rel="stylesheet" href="css/extractor.css">
+<link rel="stylesheet" href="css/curriculum.css">
+<link rel="stylesheet" href="css/school-manager.css">
+<link rel="stylesheet" href="css/home.css">
+<link rel="stylesheet" href="css/question-bank.css">
+<link rel="stylesheet" href="css/add-questions.css">
+<link rel="stylesheet" href="css/classroom.css">
+<link rel="stylesheet" href="css/study-mode.css">
+<link rel="stylesheet" href="css/live-quiz.css">
+</head>
+<body>
+<div id="login-screen" class="login-screen" style="display:none">
+  <div class="login-card">
+    <img class="login-logo" src="app-logo.png" alt="Quero Learning Tools logo">
+    <div id="login-form">
+      <div class="auth-form-title">Login</div>
+      <div class="login-field"><input id="login-email" type="text" autocomplete="username" placeholder="Username or Email"><i class="ti ti-user-filled"></i></div>
+      <div class="login-field"><input id="login-password" type="password" autocomplete="current-password" placeholder="Password" onkeydown="if(event.key==='Enter')loginWithEmail()"><i class="ti ti-lock"></i></div>
+      <div class="login-row"><label class="login-remember"><input id="login-remember" type="checkbox"> Remember me</label><button type="button" class="login-forgot" onclick="sendPasswordReset()">Forgot Password?</button></div>
+      <div id="login-error" class="login-error"></div>
+      <button type="button" class="btn btn-primary" id="login-btn" onclick="loginWithEmail()">Login</button>
+      <button type="button" class="login-switch-btn" onclick="showRegisterForm()">Don't have an account? Register</button>
+    </div>
+    <div id="register-form" style="display:none">
+      <div class="auth-form-title">Register</div>
+      <div class="login-field"><input id="register-username" type="text" autocomplete="username" placeholder="Username"><i class="ti ti-user-filled"></i></div>
+      <div class="login-field"><input id="register-email" type="email" autocomplete="email" placeholder="Email"><i class="ti ti-mail-filled"></i></div>
+      <div class="login-field"><select id="register-role" aria-label="Register as"><option value="student">Student</option><option value="teacher">Teacher</option></select><i class="ti ti-users"></i></div>
+      <div class="login-field"><input id="register-school-code" type="text" autocomplete="off" placeholder="Student or teacher join code"><i class="ti ti-building"></i></div>
+      <div class="login-field"><input id="register-password" type="password" autocomplete="new-password" placeholder="Password" onkeydown="if(event.key==='Enter')registerWithEmail()"><i class="ti ti-lock"></i></div>
+      <div class="login-terms"><input id="register-terms" type="checkbox"><label for="register-terms">I agree with the terms &amp; conditions</label></div>
+      <div id="register-error" class="login-error"></div>
+      <button type="button" class="btn btn-primary" id="register-btn" onclick="registerWithEmail()">Register</button>
+      <button type="button" class="login-switch-btn" onclick="showLoginForm()">Already have an account? Login</button>
+    </div>
+    <div id="reset-form" style="display:none">
+      <div class="auth-form-title">Reset</div>
+      <div class="login-field"><input id="reset-password" type="password" autocomplete="new-password" placeholder="New password"><i class="ti ti-lock"></i></div>
+      <div class="login-field"><input id="reset-password-confirm" type="password" autocomplete="new-password" placeholder="Confirm new password" onkeydown="if(event.key==='Enter')resetPassword()"><i class="ti ti-lock"></i></div>
+      <div id="reset-error" class="login-error"></div>
+      <button type="button" class="btn btn-primary" id="reset-btn" onclick="resetPassword()">Update password</button>
+      <button type="button" class="login-switch-btn" onclick="showLoginForm()">Back to sign in</button>
+    </div>
+  </div>
+</div>
+<div class="app home-shell" id="app" style="display:none">
+  <div id="global-topbar" class="global-topbar"></div>
+  <div class="sidebar" aria-label="Tools">
+    <button type="button" class="nav-item active" onclick="showView('home')" id="nav-home" title="Home"><i class="ti ti-home"></i><span>Home</span></button>
+    <button type="button" class="nav-item" onclick="showView('bank')" id="nav-bank" title="Question Bank"><i class="ti ti-database"></i><span>Question Bank</span></button>
+    <button type="button" class="nav-item" onclick="showView('deleted')" id="nav-deleted" title="Recently Deleted"><i class="ti ti-trash"></i><span>Recently Deleted</span></button>
+    <button type="button" class="nav-item" onclick="showView('extractor')" id="nav-extractor" title="Question Extractor"><i class="ti ti-file-import"></i><span>Question Extractor</span></button>
+    <button type="button" class="nav-item" onclick="showView('curriculum')" id="nav-curriculum" title="Curriculum Manager"><i class="ti ti-sitemap"></i><span>Curriculum Manager</span></button>
+    <button type="button" class="nav-item" onclick="showView('schools')" id="nav-schools" title="School Manager"><i class="ti ti-building-skyscraper"></i><span>School Manager</span></button>
+    <button type="button" class="nav-item" onclick="showView('create')" id="nav-create" title="Create Question"><i class="ti ti-writing"></i><span>Create Question</span></button>
+    <button type="button" class="nav-item" onclick="showView('builder')" id="nav-builder" title="Exam Builder"><i class="ti ti-clipboard-list"></i><span>Exam Builder</span></button>
+    <button type="button" class="nav-item" onclick="showView('papers')" id="nav-papers" title="My Papers"><i class="ti ti-files"></i><span>My Papers</span></button>
+    <button type="button" class="nav-item" onclick="showView('admin-users')" id="nav-admin-users" title="Admin Users"><i class="ti ti-users"></i><span>Admin Users</span></button>
+    <button type="button" class="nav-item" onclick="showView('classroom-archive')" id="nav-classroom-archive" title="Classroom Archive"><i class="ti ti-archive"></i><span>Classroom Archive</span></button>
+  </div>
+
+  <div class="main">
+    <!-- HOME -->
+    <div id="view-home" class="view">
+      <div id="home-root" class="home-root"></div>
+    </div>
+
+    <!-- CLASSROOM ARCHIVE -->
+    <div id="view-classroom-archive" class="view" style="display:none">
+      <div id="classroom-archive-root" class="home-root"></div>
+    </div>
+
+    <!-- QUESTION BANK -->
+    <div id="view-bank" class="view" style="display:none">
+      <div class="topbar bank-page-head"><h1>Question Bank</h1><span id="bank-result-count" aria-live="polite"></span></div>
+      <div class="bank-tabs" id="bank-tabs"></div>
+      <div class="bank-manager-panel" id="bank-manager-panel">
+        <div class="bank-manager-grid">
+          <label>Bank name<input id="new-bank-name" placeholder="e.g. Year 9 Algebra Bank"></label>
+          <label>Visibility<select id="new-bank-visibility"><option value="private">Private</option><option value="school">School</option><option value="shared">Shared</option><option value="public">Public</option></select></label>
+          <button class="btn primary" type="button" onclick="createCustomBank()"><i class="ti ti-plus"></i>Create Bank</button>
+        </div>
+        <div class="bank-manager-note">Built-in banks stay fixed. Custom banks can be renamed or removed while empty.</div>
+        <div class="bank-manager-list" id="bank-manager-list"></div>
+      </div>
+      <div class="filter-row bank-filter-row">
+        <input id="search-input" placeholder="Search questions..." oninput="renderBank()">
+        <select id="type-filter" onchange="renderBank()"><option value="">All types</option><option value="mc">Multiple Choice Question (MCQ)</option><option value="tf">True or False (T/F)</option><option value="sa">Short Answer (SA)</option><option value="er">Extended Response (ER)</option></select>
+        <select id="bank-subject-filter" onchange="renderBank()"><option value="">All subjects</option></select>
+        <select id="bank-topic-filter" onchange="renderBank()"><option value="">All topics</option></select>
+        <select id="bank-subtopic-filter" onchange="renderBank()"><option value="">All subtopics</option></select>
+        <select id="bank-skill-filter" onchange="renderBank()"><option value="">All skills</option></select>
+        <select id="bank-year-filter" onchange="renderBank()"><option value="">All year levels</option></select>
+        <select id="bank-difficulty-filter" onchange="renderBank()"><option value="">All difficulties</option></select>
+        <select id="bank-calculator-filter" onchange="renderBank()"><option value="">All calculator types</option></select>
+        <select id="bank-author-filter" onchange="renderBank()"><option value="">All authors</option></select>
+        <select id="bank-date-filter" onchange="renderBank()"><option value="">All years</option></select>
+        <select id="bank-question-number-filter" onchange="renderBank()"><option value="">Question number: lowest to highest</option></select>
+      </div>
+      <div id="bank-list"></div>
+    </div>
+
+    <!-- RECENTLY DELETED -->
+    <div id="view-deleted" class="view" style="display:none">
+      <div class="topbar"><div><div style="font-size:15px;font-weight:700">Recently Deleted</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">Restore accidentally deleted questions within 30 days</div></div><button class="btn danger" onclick="deleteAllRecentlyDeleted()"><i class="ti ti-trash-x"></i>Delete all</button></div>
+      <div id="deleted-list" style="flex:1;overflow-y:auto"></div>
+    </div>
+
+    <!-- QUESTION EXTRACTOR -->
+    <div id="view-extractor" class="view" style="display:none">
+      <div class="topbar">
+        <div><div style="font-size:15px;font-weight:700">Question Extractor</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">Import text from documents, preview detected questions, then save them to the bank</div></div>
+      </div>
+      <div class="extractor-layout">
+        <div class="extractor-panel">
+          <div class="form-group"><label>Document text</label><textarea id="extractor-text" placeholder="Paste exam questions here, or upload a TXT/DOCX file..." oninput="parseExtractorFromText()"></textarea></div>
+          <div class="extractor-actions">
+            <input type="file" id="extractor-file" accept=".txt,.docx,.pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" style="display:none" onchange="handleExtractorFile(event)">
+            <button type="button" class="btn" onclick="document.getElementById('extractor-file').click()"><i class="ti ti-upload"></i>Upload TXT/DOCX/PDF</button>
+            <button type="button" class="btn secondary" onclick="parseExtractorFromText()"><i class="ti ti-scan"></i>Extract</button>
+            <button type="button" class="btn secondary" onclick="clearExtractor()"><i class="ti ti-x"></i>Clear</button>
+          </div>
+          <div class="extractor-note">DOCX and TXT are read directly in the app. PDF support currently prompts you to paste copied text unless a PDF text layer/parser is added later.</div>
+          <div style="margin-top:10px;border-top:0.5px solid var(--color-border-tertiary);padding-top:10px">
+            <label style="display:block;margin-bottom:6px">Question Meta</label>
+            <div class="extractor-meta-grid">
+              <select id="extractor-global-bank"><option value="private">Private Bank</option><option value="brainforge">Quero Learning Tools Bank</option><option value="vcaa">VCAA Bank</option><option value="global">Global Bank</option></select>
+              <select id="extractor-global-author"><option>Original</option><option>VCAA</option><option>VCAA: NHT</option><option>AI-Generated</option></select>
+              <select id="extractor-global-calculator"><option>Calculator</option><option>Non-Calculator</option></select>
+              <input id="extractor-global-year" type="number" min="1900" max="2100" value="2026" title="Year" placeholder="Year">
+              <div class="year-multiselect extractor-multiselect" id="extractor-global-subject-wrap"><button type="button" class="multi-select-button" id="extractor-global-subject-button" onclick="toggleExtractorMultiMenu(event,'extractor-global-subject')">General Mathematics</button><div class="multi-select-menu" id="extractor-global-subject-menu"><label class="multi-select-option"><input type="checkbox" value="F-6 Mathematics" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>F-6 Mathematics</span></label><label class="multi-select-option"><input type="checkbox" value="F-6 Science" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>F-6 Science</span></label><label class="multi-select-option"><input type="checkbox" value="7-10A Mathematics" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>7-10A Mathematics</span></label><label class="multi-select-option"><input type="checkbox" value="7-10A Science" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>7-10A Science</span></label><label class="multi-select-option"><input type="checkbox" value="Foundation Mathematics" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Foundation Mathematics</span></label><label class="multi-select-option"><input type="checkbox" value="General Mathematics" checked onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>General Mathematics</span></label><label class="multi-select-option"><input type="checkbox" value="Mathematical Methods" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Mathematical Methods</span></label><label class="multi-select-option"><input type="checkbox" value="Specialist Mathematics" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Specialist Mathematics</span></label><label class="multi-select-option"><input type="checkbox" value="Physics" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Physics</span></label><label class="multi-select-option"><input type="checkbox" value="Chemistry" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Chemistry</span></label><label class="multi-select-option"><input type="checkbox" value="Biology" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Biology</span></label><label class="multi-select-option"><input type="checkbox" value="Psychology" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Psychology</span></label></div></div>
+              <div class="year-multiselect extractor-multiselect" id="extractor-global-topic-wrap"><button type="button" class="multi-select-button" id="extractor-global-topic-button" onclick="toggleExtractorMultiMenu(event,'extractor-global-topic')">Topic</button><div class="multi-select-menu" id="extractor-global-topic-menu"><label class="multi-select-option"><input type="checkbox" value="Topic" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Topic</span></label></div></div>
+              <div class="year-multiselect extractor-multiselect" id="extractor-global-subtopic-wrap"><button type="button" class="multi-select-button" id="extractor-global-subtopic-button" onclick="toggleExtractorMultiMenu(event,'extractor-global-subtopic')">Subtopic</button><div class="multi-select-menu" id="extractor-global-subtopic-menu"><label class="multi-select-option"><input type="checkbox" value="Subtopic" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Subtopic</span></label></div></div>
+              <div class="year-multiselect extractor-multiselect" id="extractor-global-skills-wrap"><button type="button" class="multi-select-button" id="extractor-global-skills-button" onclick="toggleExtractorMultiMenu(event,'extractor-global-skills')">Skills</button><div class="multi-select-menu" id="extractor-global-skills-menu"><label class="multi-select-option"><input type="checkbox" value="Skills" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>Skills</span></label></div></div>
+              <span></span><span></span><span></span><div class="year-multiselect extractor-multiselect" id="extractor-global-year-level-wrap"><button type="button" class="multi-select-button" id="extractor-global-year-level-button" onclick="toggleExtractorMultiMenu(event,'extractor-global-year-level')">7</button><div class="multi-select-menu" id="extractor-global-year-level-menu"><label class="multi-select-option"><input type="checkbox" value="F" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>F</span></label><label class="multi-select-option"><input type="checkbox" value="2" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>2</span></label><label class="multi-select-option"><input type="checkbox" value="3" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>3</span></label><label class="multi-select-option"><input type="checkbox" value="4" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>4</span></label><label class="multi-select-option"><input type="checkbox" value="5" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>5</span></label><label class="multi-select-option"><input type="checkbox" value="6" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>6</span></label><label class="multi-select-option"><input type="checkbox" value="7" checked onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>7</span></label><label class="multi-select-option"><input type="checkbox" value="8" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>8</span></label><label class="multi-select-option"><input type="checkbox" value="9" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>9</span></label><label class="multi-select-option"><input type="checkbox" value="10" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>10</span></label><label class="multi-select-option"><input type="checkbox" value="10A" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>10A</span></label><label class="multi-select-option"><input type="checkbox" value="11 VCE" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>11 VCE</span></label><label class="multi-select-option"><input type="checkbox" value="12 VCE" onchange="updateExtractorMultiButton(this.closest('.extractor-multiselect'))"> <span>12 VCE</span></label></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="extractor-panel">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+            <div><label style="display:block;margin-bottom:3px">Detected Questions</label><div id="extractor-count" style="font-size:12px;color:var(--color-text-secondary);line-height:1.35">No questions detected yet</div></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn" onclick="unselectExtractorQuestions()"><i class="ti ti-square"></i>Unselect all</button><button type="button" class="btn btn-primary" onclick="saveExtractorQuestions()"><i class="ti ti-device-floppy"></i>Save selected</button></div>
+          </div>
+          <div id="extractor-preview" class="extractor-preview-list"><div class="empty-state"><i class="ti ti-file-search"></i><div>Paste or upload a document to start</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CURRICULUM MANAGER -->
+    <div id="view-curriculum" class="view" style="display:none">
+      <div class="topbar">
+        <div><div style="font-size:15px;font-weight:700">Curriculum Manager</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">Manage Topic -> Subtopic -> Skill links for Create Question and Question Extractor</div></div>
+      </div>
+      <div class="curriculum-savebar">
+        <div class="curriculum-note">Edit skills here, then save. Questions using deleted or changed skills will show a warning in the Question Bank.</div>
+        <button type="button" class="btn btn-primary" id="curriculum-save-btn" onclick="saveCurriculumToSupabase()"><i class="ti ti-cloud-upload"></i>Save hierarchy</button>
+      </div>
+      <div class="curriculum-learning-bar" id="curriculum-learning-tabs"></div>
+      <div class="curriculum-manager">
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Topics</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumTopic()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameCurriculumTopic()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumTopic(-1)"><i class="ti ti-arrow-up"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumTopic(1)"><i class="ti ti-arrow-down"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteCurriculumTopic()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-topic-list"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Subtopics</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumSubtopic()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameCurriculumSubtopic()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumSubtopic(-1)"><i class="ti ti-arrow-up"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumSubtopic(1)"><i class="ti ti-arrow-down"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteCurriculumSubtopic()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-subtopic-list"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Skills</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumSkill()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameCurriculumSkill()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumSkill(-1)"><i class="ti ti-arrow-up"></i></button><button type="button" class="btn btn-sm" onclick="moveCurriculumSkill(1)"><i class="ti ti-arrow-down"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteCurriculumSkill()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-skill-list"></div>
+          <div class="curriculum-editor" id="curriculum-skill-editor" style="margin-top:12px"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Subjects</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumSubject()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameSelectedCurriculumSubject()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteSelectedCurriculumSubject()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-subject-link-list"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Year Levels</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumYearLevel()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameSelectedCurriculumYearLevel()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteSelectedCurriculumYearLevel()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-year-link-list"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">YouTube Links</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumYoutubeLink()" title="Add"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="editSelectedCurriculumYoutubeLink()" title="Edit"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm" onclick="moveSelectedCurriculumYoutubeLink(-1)" title="Move up"><i class="ti ti-arrow-up"></i></button><button type="button" class="btn btn-sm" onclick="moveSelectedCurriculumYoutubeLink(1)" title="Move down"><i class="ti ti-arrow-down"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteSelectedCurriculumYoutubeLink()" title="Delete"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-youtube-link-list"></div>
+        </div>
+        <div class="curriculum-column">
+          <div class="curriculum-column-head"><div class="curriculum-column-title">Authors</div><div class="curriculum-actions"><button type="button" class="btn btn-sm" onclick="addCurriculumAuthor()"><i class="ti ti-plus"></i></button><button type="button" class="btn btn-sm" onclick="renameSelectedCurriculumAuthor()"><i class="ti ti-pencil"></i></button><button type="button" class="btn btn-sm danger" onclick="deleteSelectedCurriculumAuthor()"><i class="ti ti-trash"></i></button></div></div>
+          <div class="curriculum-list" id="curriculum-author-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE / EDIT -->
+    <div id="view-create" class="view" style="display:none">
+      <div class="topbar">
+        <div><div style="font-size:15px;font-weight:700" id="create-title">Create Question</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px" id="create-subtitle">Add a new question to the bank</div></div>
+        <button class="btn btn-sm" onclick="cancelEdit()" id="cancel-edit-btn" style="display:none"><i class="ti ti-arrow-left"></i>Back</button>
+      </div>
+      <div style="width:100%;max-width:none">
+        <div class="form-group"><label>Question type</label><div class="template-choices question-type-choices" id="question-type-picker"><button type="button" class="template-choice active" data-question-type="mc" onclick="setQuestionType('mc')"><span class="template-choice-title">MCQ</span><span class="template-choice-sub">Multiple choice</span></button><button type="button" class="template-choice" data-question-type="tf" onclick="setQuestionType('tf')"><span class="template-choice-title">T/F</span><span class="template-choice-sub">True or false</span></button><button type="button" class="template-choice" data-question-type="sa" onclick="setQuestionType('sa')"><span class="template-choice-title">SA</span><span class="template-choice-sub">Short answer</span></button><button type="button" class="template-choice" data-question-type="er" onclick="setQuestionType('er')"><span class="template-choice-title">ER</span><span class="template-choice-sub">Extended response</span></button></div><input type="hidden" id="f-type" value="mc"></div>
+        <div id="mc-template-picker"></div>
+        <div class="rich-editor-toolbar" id="question-toolbar"><button type="button" class="toolbar-btn" data-q-cmd="bold" onmousedown="event.preventDefault();formatQuestionText('bold')" title="Bold"><b>B</b></button><button type="button" class="toolbar-btn" data-q-cmd="italic" onmousedown="event.preventDefault();formatQuestionText('italic')" title="Italic"><i>I</i></button><button type="button" class="toolbar-btn" data-q-cmd="underline" onmousedown="event.preventDefault();formatQuestionText('underline')" title="Underline"><u>U</u></button><button type="button" class="toolbar-btn" data-q-cmd="subscript" onmousedown="event.preventDefault();formatQuestionText('subscript')" title="Subscript"><i class="ti ti-subscript"></i></button><button type="button" class="toolbar-btn" data-q-cmd="superscript" onmousedown="event.preventDefault();formatQuestionText('superscript')" title="Superscript"><i class="ti ti-superscript"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" data-q-cmd="insertUnorderedList" onmousedown="event.preventDefault();formatQuestionText('insertUnorderedList')" title="Bullet list"><i class="ti ti-list"></i></button><span class="toolbar-menu-wrap"><button type="button" class="toolbar-btn" id="numbering-menu-btn" onmousedown="event.preventDefault();toggleNumberingMenu()" title="Numbering"><i class="ti ti-list-numbers"></i></button><span class="toolbar-menu" id="numbering-menu"><button type="button" onmousedown="event.preventDefault();applyNumberedList('decimal')">1, 2, 3</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-alpha')">a, b, c</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-alpha')">A, B, C</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-roman')">i, ii, iii</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-roman')">I, II, III</button></span></span><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('outdent')" title="Decrease indent"><i class="ti ti-indent-decrease"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('indent')" title="Increase indent"><i class="ti ti-indent-increase"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyLeft')" title="Left"><i class="ti ti-align-left"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyCenter')" title="Centre"><i class="ti ti-align-center"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyRight')" title="Right"><i class="ti ti-align-right"></i></button><div class="toolbar-sep"></div><span class="latex-inline-wrap"><span class="latex-inline-label">LaTeX</span><input type="text" id="latex-inline-input" class="latex-inline-input" placeholder="e.g. x^2 or \frac{a}{b}" onmousedown="rememberCreateSelection()" onkeydown="handleLatexInputKey(event)" title="Type LaTeX and press Enter"></span></div>
+        <div class="form-group"><label id="main-text-label">Question text</label><div class="rich-editor-wrap"><div id="f-text" class="rich-editor editable-text" contenteditable="true" data-placeholder="Enter your question here..." onkeyup="updateQuestionToolbar();scheduleSimilarityCheck()" onmouseup="updateQuestionToolbar()" onfocus="setActiveEditor('f-text')"></div></div></div>
+        <div id="similarity-panel" class="similarity-panel"></div>
+        <div id="type-fields"></div>
+        <div class="form-group" id="solution-field"><div id="answer-template-field" style="display:none"></div><div class="answer-template-normal-panel" id="main-normal-lines-panel"><div class="solution-line-grid"><div><label>Solution</label><div class="rich-editor-wrap"><div id="f-solution" class="rich-editor editable-text" contenteditable="true" data-placeholder="Enter solution here..." onkeyup="updateQuestionToolbar()" onmouseup="updateQuestionToolbar()" onfocus="setActiveEditor('f-solution')"></div></div></div></div><div class="solution-controls-row"><div class="solution-lines-field" id="solution-lines-field" style="display:none"><label>No.Lines</label><input id="f-lines" type="number" min="0" value="1"></div><div class="answer-box-upload" id="answer-box-upload-field" style="display:none"><label>Answer Box</label><div class="answer-box-upload-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('f-answer-box-file').click()"><i class="ti ti-photo-plus"></i>Answer Box</button><button type="button" id="f-answer-box-remove" class="btn btn-sm answer-box-remove" onclick="clearAnswerBoxImage('box')" style="display:none"><i class="ti ti-x"></i></button></div><input type="file" id="f-answer-box-file" accept="image/png,image/jpeg" style="display:none" onchange="handleAnswerBoxImageUpload(event,'box')"><input type="hidden" id="f-answer-box-data"><input type="hidden" id="f-answer-box-name"><div id="f-answer-box-display" class="answer-box-name"></div></div><div class="answer-box-upload" id="answer-box-solution-upload-field" style="display:none"><label>Answer Box Solution</label><div class="answer-box-upload-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('f-answer-box-solution-file').click()"><i class="ti ti-photo-plus"></i>Answer Box Solution</button><button type="button" id="f-answer-box-solution-remove" class="btn btn-sm answer-box-remove" onclick="clearAnswerBoxImage('solution')" style="display:none"><i class="ti ti-x"></i></button></div><input type="file" id="f-answer-box-solution-file" accept="image/png,image/jpeg" style="display:none" onchange="handleAnswerBoxImageUpload(event,'solution')"><input type="hidden" id="f-answer-box-solution-data"><input type="hidden" id="f-answer-box-solution-name"><div id="f-answer-box-solution-display" class="answer-box-name"></div></div></div></div><div class="answer-template-table-panel" id="main-table-image-panel" style="display:none"><div class="solution-controls-row"><div class="answer-box-upload"><label>Answer Table/Image</label><div class="answer-box-upload-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('f-answer-table-file').click()"><i class="ti ti-photo-plus"></i>Answer Table/Image</button><button type="button" id="f-answer-table-remove" class="btn btn-sm answer-box-remove" onclick="clearAnswerBoxImage('table')" style="display:none"><i class="ti ti-x"></i></button></div><input type="file" id="f-answer-table-file" accept="image/png,image/jpeg" style="display:none" onchange="handleAnswerBoxImageUpload(event,'table')"><input type="hidden" id="f-answer-table-data"><input type="hidden" id="f-answer-table-name"><div id="f-answer-table-display" class="answer-box-name"></div></div><div class="answer-box-upload"><label>Answer Table/Image Solution</label><div class="answer-box-upload-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('f-answer-table-solution-file').click()"><i class="ti ti-photo-plus"></i>Answer Table/Image Solution</button><button type="button" id="f-answer-table-solution-remove" class="btn btn-sm answer-box-remove" onclick="clearAnswerBoxImage('tableSolution')" style="display:none"><i class="ti ti-x"></i></button></div><input type="file" id="f-answer-table-solution-file" accept="image/png,image/jpeg" style="display:none" onchange="handleAnswerBoxImageUpload(event,'tableSolution')"><input type="hidden" id="f-answer-table-solution-data"><input type="hidden" id="f-answer-table-solution-name"><div id="f-answer-table-solution-display" class="answer-box-name"></div></div></div></div></div>
+                <div class="vcaa-report-section" id="vcaa-report-section">
+  <div class="metadata-section-title">VCAA Report</div>
+  <div class="vcaa-report-grid">
+    <div class="vcaa-report-card" onpaste="handleVcaaReportPaste(event,'header')">
+      <label>Header</label>
+      <div class="vcaa-report-actions">
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('f-vcaa-report-header').click()"><i class="ti ti-photo-plus"></i>Insert Header</button>
+        <button type="button" class="btn btn-sm answer-box-remove" id="f-vcaa-report-header-remove" onclick="clearVcaaReportImage('header')" style="display:none"><i class="ti ti-x"></i></button>
+      </div>
+      <input type="file" id="f-vcaa-report-header" accept="image/png,image/jpeg" style="display:none" onchange="handleVcaaReportUpload(event,'header')">
+      <input type="hidden" id="f-vcaa-report-header-data">
+      <input type="hidden" id="f-vcaa-report-header-name">
+      <div id="vcaa-report-header-preview" class="vcaa-report-preview"></div>
+    </div>
+    <div class="vcaa-report-card" onpaste="handleVcaaReportPaste(event,'report')">
+      <label>Report</label>
+      <div class="vcaa-report-actions">
+        <button type="button" class="btn btn-sm" onclick="document.getElementById('f-vcaa-report-report').click()"><i class="ti ti-photo-plus"></i>Insert Report</button>
+        <button type="button" class="btn btn-sm answer-box-remove" id="f-vcaa-report-report-remove" onclick="clearVcaaReportImage('report')" style="display:none"><i class="ti ti-x"></i></button>
+      </div>
+      <input type="file" id="f-vcaa-report-report" accept="image/png,image/jpeg" style="display:none" onchange="handleVcaaReportUpload(event,'report')">
+      <input type="hidden" id="f-vcaa-report-report-data">
+      <input type="hidden" id="f-vcaa-report-report-name">
+      <div id="vcaa-report-report-preview" class="vcaa-report-preview"></div>
+    </div>
+  </div>
+</div>
+<div class="metadata-section">
+          <div class="metadata-section-title">Creator</div>
+          <div class="metadata-grid">
+            <div class="form-group"><label>Marks</label><input type="number" id="f-marks" min="1" max="100" value="1"></div>
+            <div class="form-group"><label>Subjects</label><div class="metadata-multiselect" id="f-subjects-wrap"><button type="button" class="multi-select-button" id="f-subjects-button" onclick="toggleCreatorMultiMenu('subjects',event)">General Mathematics</button><div class="multi-select-menu" id="f-subjects-menu"></div></div></div>
+            <div class="form-group"><label>Topics</label><div class="metadata-multiselect" id="f-topics-wrap"><button type="button" class="multi-select-button" id="f-topics-button" onclick="toggleCreatorMultiMenu('topics',event)">Select topics</button><div class="multi-select-menu" id="f-topics-menu"></div></div></div>
+            <div class="form-group"><label>Subtopics</label><div class="metadata-multiselect" id="f-subtopics-wrap"><button type="button" class="multi-select-button" id="f-subtopics-button" onclick="toggleCreatorMultiMenu('subtopics',event)">Select subtopics</button><div class="multi-select-menu" id="f-subtopics-menu"></div></div></div>
+          </div>
+          <div class="metadata-grid">
+            <div class="form-group"><label>Skills</label><div class="metadata-multiselect" id="f-skills-wrap"><button type="button" class="multi-select-button" id="f-skills-button" onclick="toggleCreatorMultiMenu('skills',event)">Select skills</button><div class="multi-select-menu" id="f-skills-menu"></div></div></div>
+              <div class="form-group"><label>Year Level</label><div class="metadata-multiselect" id="f-year-level-wrap"><button type="button" class="multi-select-button" id="f-year-level-button" onclick="toggleCreatorMultiMenu('year-level',event)">7</button><div class="multi-select-menu" id="f-year-level-menu"></div></div></div>
+            <div class="form-group"><label>Difficulty</label><select id="f-difficulty"><option>Easy</option><option>Medium</option><option>Hard</option><option>Advance</option><option>Extension</option></select></div>
+            <div class="form-group"><label>Calculator</label><select id="f-calculator"><option>Calculator</option><option>Non-Calculator</option></select></div>
+          </div>
+          <div class="metadata-grid">
+            <div class="form-group"><label>Author</label><select id="f-author"><option>Original</option><option>VCAA</option><option>VCAA: NHT</option><option>AI-Generated</option></select></div>
+            <div class="form-group"><label>Year</label><input type="number" id="f-date" min="1900" max="2100" step="1" placeholder="Year created"></div>
+            <div class="form-group"><label>Question Number</label><input type="number" id="f-question-number" min="1" step="1" value="1" placeholder="Question number"></div>
+            <div class="form-group"><label>Response (%)</label><input type="number" id="f-response" min="0" max="100" step="1" placeholder="0-100"></div>
+          </div>
+        </div><div class="metadata-section metadata-admin-section"><div class="metadata-section-title">Admin</div>
+          <div class="metadata-grid">
+            <div class="form-group"><label>Question Bank</label><select id="f-bank"><option value="private">Private Bank</option><option value="brainforge">Quero Learning Tools Bank</option><option value="vcaa">VCAA Bank</option><option value="global">Global Bank</option></select></div>
+            <div class="form-group"><label>Review Status</label><select id="f-review-status"><option>Draft</option><option>Needs review</option><option>Approved</option><option>Retire</option></select></div>
+            <div class="form-group"><label>Reviewed By</label><input type="text" id="f-reviewed-by" placeholder="Reviewer name"></div>
+          </div>
+        </div>
+        <div class="metadata-section metadata-users-section"><div class="metadata-section-title">Users</div>
+          <div class="metadata-grid">
+<div class="form-group"><label>Teacher Rating</label><input type="number" id="f-teacher-rating" min="0" max="5" step="0.1" placeholder="0-5" readonly></div>
+            <div class="form-group"><label>Student Rating</label><input type="number" id="f-student-rating" min="0" max="5" step="0.1" placeholder="0-5" readonly></div>
+            <div class="form-group"><label>Teacher Rating Count</label><input type="number" id="f-teacher-rating-count" min="0" step="1" value="0" readonly></div>
+            <div class="form-group"><label>Student Rating Count</label><input type="number" id="f-student-rating-count" min="0" step="1" value="0" readonly></div>
+            <div class="form-group"><label>Teacher Rating Total</label><input type="number" id="f-teacher-rating-total" min="0" step="0.1" value="0" readonly></div>
+            <div class="form-group"><label>Student Rating Total</label><input type="number" id="f-student-rating-total" min="0" step="0.1" value="0" readonly></div>
+            <div class="form-group"><label>Attempt Count</label><input type="number" id="f-attempt-count" min="0" step="1" value="0" readonly></div>
+            <div class="form-group"><label>Correct Count</label><input type="number" id="f-correct-count" min="0" step="1" value="0" readonly></div>
+          </div>
+          <div class="metadata-grid">
+            <div class="form-group" style="grid-column:span 4"><label>Comments</label><textarea id="f-comments" placeholder="Comments and suggestions" readonly></textarea></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn btn-primary" onclick="saveQuestion()"><i class="ti ti-check"></i><span id="save-btn-label">Add to bank</span></button>
+          <button class="btn" onclick="cancelEdit()" id="cancel-edit-btn2" style="display:none">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- EXAM BUILDER -->
+    <div id="view-builder" class="view" style="display:none">
+      <div class="exam-builder-workspace">
+      <div class="topbar">
+        <div style="flex:1;min-width:0">
+          <input id="exam-title" value="Untitled Exam" style="font-size:15px;font-weight:700;border:none;outline:none;background:transparent;color:var(--color-text-primary);width:100%;max-width:300px;font-family:Arial,sans-serif"/>
+          <div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px" id="exam-summary-line">0 questions - 0 marks</div></div><div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-sm exam-action exam-action-questions" onclick="showView('addq')"><i class="ti ti-plus"></i>Questions</button>
+          <button class="btn btn-sm exam-action exam-action-shuffle" onclick="shuffleExamOptions()"><i class="ti ti-arrows-shuffle"></i>Shuffle</button>
+          <button class="btn btn-sm exam-action exam-action-save" onclick="savePaper()"><i class="ti ti-device-floppy"></i>Save</button>
+          <button class="btn btn-sm exam-action exam-action-export" onclick="exportExam()" id="export-btn"><i class="ti ti-download"></i>Export</button>
+          <button class="btn btn-sm exam-action exam-action-answers" onclick="exportAnswers()" id="export-answers-btn"><i class="ti ti-file-check"></i>Answers</button>
+        </div>
+      </div>
+      <div class="exam-setup-panel" id="exam-setup-panel">
+        <div class="exam-setup-field"><label>Subject</label><select id="exam-subject"><option>F-6 Mathematics</option><option>F-6 Science</option><option>7-10A Mathematics</option><option>7-10A Science</option><option>Foundation Mathematics</option><option>General Mathematics</option><option>Mathematical Methods</option><option>Specialist Mathematics</option><option>Physics</option><option>Chemistry</option><option>Biology</option><option>Psychology</option></select></div>
+        <div class="exam-setup-field"><label>Examination</label><select id="exam-number"><option>Examination</option><option>Examination 1</option><option>Examination 2</option></select></div>
+        <div class="exam-setup-field"><label>Date</label><input type="date" id="exam-date"></div>
+        <div class="exam-setup-field"><label>Time</label><input type="time" id="exam-time" value="14:00"></div>
+        <div class="exam-setup-field"><label>Reading time</label><div class="duration-step-control"><input type="text" id="exam-reading-time" value="15 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustReadingTime(5)" title="Increase reading time by 5 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustReadingTime(-5)" title="Decrease reading time by 5 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
+        <div class="exam-setup-field"><label>Writing time</label><div class="duration-step-control"><input type="text" id="exam-writing-time" value="90 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustWritingTime(10)" title="Increase writing time by 10 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustWritingTime(-10)" title="Decrease writing time by 10 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
+      </div>
+      <div class="rich-editor-toolbar" id="builder-toolbar"><button type="button" class="toolbar-btn" data-q-cmd="bold" onmousedown="event.preventDefault();formatQuestionText('bold')" title="Bold"><b>B</b></button><button type="button" class="toolbar-btn" data-q-cmd="italic" onmousedown="event.preventDefault();formatQuestionText('italic')" title="Italic"><i>I</i></button><button type="button" class="toolbar-btn" data-q-cmd="underline" onmousedown="event.preventDefault();formatQuestionText('underline')" title="Underline"><u>U</u></button><button type="button" class="toolbar-btn" data-q-cmd="subscript" onmousedown="event.preventDefault();formatQuestionText('subscript')" title="Subscript"><i class="ti ti-subscript"></i></button><button type="button" class="toolbar-btn" data-q-cmd="superscript" onmousedown="event.preventDefault();formatQuestionText('superscript')" title="Superscript"><i class="ti ti-superscript"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" data-q-cmd="insertUnorderedList" onmousedown="event.preventDefault();formatQuestionText('insertUnorderedList')" title="Bullet list"><i class="ti ti-list"></i></button><span class="toolbar-menu-wrap"><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();toggleNumberingMenu(undefined,'builder-numbering-menu')" title="Numbering"><i class="ti ti-list-numbers"></i></button><span class="toolbar-menu" id="builder-numbering-menu"><button type="button" onmousedown="event.preventDefault();applyNumberedList('decimal')">1, 2, 3</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-alpha')">a, b, c</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-alpha')">A, B, C</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-roman')">i, ii, iii</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-roman')">I, II, III</button></span></span><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('outdent')" title="Decrease indent"><i class="ti ti-indent-decrease"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('indent')" title="Increase indent"><i class="ti ti-indent-increase"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyLeft')" title="Left"><i class="ti ti-align-left"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyCenter')" title="Centre"><i class="ti ti-align-center"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyRight')" title="Right"><i class="ti ti-align-right"></i></button></div>
+      <div id="exam-sections"></div>
+      </div>
+    </div>
+
+    <!-- ADD QUESTIONS -->
+    <div id="view-addq" style="display:none">
+      <div class="addq-content">
+        <div class="addq-page-head">
+          <h1>Add Questions to Exam</h1>
+          <button class="btn btn-sm" onclick="showView('builder')"><i class="ti ti-arrow-left"></i>Back to exam</button>
+        </div>
+        <div class="bank-tabs" id="addq-bank-tabs"></div>
+        <div class="filter-row bank-filter-row">
+          <input id="addq-search" placeholder="Search questions..." oninput="renderAddQList()">
+          <select id="addq-type-filter" onchange="renderAddQList()"><option value="">All types</option><option value="mc">Multiple Choice Question (MCQ)</option><option value="tf">True or False (T/F)</option><option value="sa">Short Answer (SA)</option><option value="er">Extended Response (ER)</option></select>
+          <select id="addq-subject-filter" onchange="renderAddQList()"><option value="">All subjects</option></select>
+          <select id="addq-topic-filter" onchange="renderAddQList()"><option value="">All topics</option></select>
+          <select id="addq-subtopic-filter" onchange="renderAddQList()"><option value="">All subtopics</option></select>
+          <select id="addq-skill-filter" onchange="renderAddQList()"><option value="">All skills</option></select>
+          <select id="addq-year-filter" onchange="renderAddQList()"><option value="">All year levels</option></select>
+          <select id="addq-difficulty-filter" onchange="renderAddQList()"><option value="">All difficulties</option></select>
+          <select id="addq-calculator-filter" onchange="renderAddQList()"><option value="">All calculator types</option></select>
+          <select id="addq-author-filter" onchange="renderAddQList()"><option value="">All authors</option></select>
+          <select id="addq-date-filter" onchange="renderAddQList()"><option value="">All years</option></select>
+          <select id="addq-question-number-filter" onchange="renderAddQList()"><option value="">Question number: lowest to highest</option></select>
+        </div>
+        <div class="addq-results-head"><span id="addq-result-count" aria-live="polite"></span></div>
+        <div id="addq-list"></div>
+      </div>
+      <div class="addq-actions">
+        <button class="btn" onclick="showView('builder')">Cancel</button>
+        <button class="btn" onclick="selectAllAddQQuestions()"><i class="ti ti-list-check"></i>Select all</button>
+        <button class="btn btn-primary" onclick="confirmAddToExam()"><i class="ti ti-check"></i>Add selected</button>
+      </div>
+    </div>
+
+
+    <div id="view-live-quiz" class="view" style="display:none">
+      <div id="live-quiz-root" class="live-quiz-root"></div>
+    </div>
+    <!-- MY PAPERS -->
+
+    <div id="view-admin-users" class="view" style="display:none">
+      <div class="topbar"><div><div style="font-size:15px;font-weight:700">Admin Users</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">View accounts and assign Quero Learning Tools roles</div></div><button class="btn btn-sm" onclick="loadAdminUsers()"><i class="ti ti-refresh"></i>Refresh</button></div>
+      <div id="admin-users-list" style="flex:1;overflow-y:auto"></div>
+    </div>
+
+    <div id="view-schools" class="view" style="display:none">
+      <div class="topbar">
+        <div><div style="font-size:15px;font-weight:700">School Manager</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">Manage schools and account records used by Exam Builder</div></div>
+      </div>
+      <div id="school-manager-root" style="flex:1;overflow-y:auto"></div>
+    </div>
+
+    <div id="view-papers" class="view" style="display:none">
+      <div id="papers-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/classroom-supabase.js"></script>
+<script src="js/state.js"></script>
+<script src="js/question-bank.js"></script>
+<script src="js/create-question.js"></script>
+<script src="js/exam-builder.js"></script>
+<script src="js/school-manager.js"></script>
+<script src="js/classroom.js"></script>
+<script src="js/home.js"></script>
+<script src="js/study-mode.js?v=github-learn-working-20260914"></script>
+<script src="js/quero-practice.js"></script>
+<script src="js/live-quiz.js"></script>
+<script src="js/docx-export.js"></script>
+<script src="js/question-extractor.js"></script>
+<script src="js/curriculum-manager.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

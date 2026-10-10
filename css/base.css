@@ -1,0 +1,22 @@
+/* Base: tokens, reset, and global defaults. */
+
+/* Quero Learning Tools base styles
+   Global tokens, fonts, reset, and app-wide defaults.
+   This first split keeps the original CSS together so behaviour is preserved.
+   We can progressively move sections into the specialised files below. */
+
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif}
+
+:root{
+  --color-text-primary:#1a1a1a;
+  --color-text-secondary:#666;
+  --color-text-tertiary:#999;
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f5f5f5;
+  --color-border-primary:#ccc;
+  --color-border-secondary:#ddd;
+  --color-border-tertiary:#e8e8e8;
+  --border-radius-md:6px;
+  --border-radius-lg:10px;
+  --font-sans:Arial,sans-serif;
+}
