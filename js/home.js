@@ -223,12 +223,13 @@
   window.renderHomePagePreservingScroll = function renderHomePagePreservingScroll(){
     const windowPos = { x: window.scrollX || 0, y: window.scrollY || 0 };
     const active = document.activeElement;
+    const activeWasInHome = !!active?.closest?.('#view-home');
     const snapshots = homeScrollSnapshots();
     renderHomePage();
     const restore = ()=>{
       restoreHomeScrollSnapshots(snapshots);
       window.scrollTo(windowPos.x, windowPos.y);
-      if(active && typeof active.blur === 'function') active.blur();
+      if(activeWasInHome && active?.isConnected && typeof active.blur === 'function') active.blur();
     };
     restore();
     requestAnimationFrame(restore);
