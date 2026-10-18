@@ -7,6 +7,12 @@
   let classroomTrackerTerm = null;
   let classroomVassSection = 'unit3';
   let classroomVassRankTeacherFilter = 'all';
+  let classroomVassRankingChannel = null;
+  let classroomVassRankingChannelKey = '';
+  let classroomVassCohortEntries = [];
+  let classroomVassCohortChannel = null;
+  let classroomVassCohortChannelKey = '';
+  let classroomVassCohortReloadTimer = null;
   let classroomTrackerPercentageDrag = null;
   let classroomPracticeMenuPositioner = null;
   let classroomPracticeOutsideClickHandler = null;
@@ -931,10 +937,11 @@
     if(!attachments.length) return '';
     return `<div class="home-announcement-attachments">${attachments.map((attachment,attachmentIndex)=>{
       const size = classroomResourceSize(attachment.fileSize);
-      return `<button type="button" class="home-announcement-attachment" onclick="downloadHomeAnnouncementAttachment(${index},'${homeEsc(item.id)}',${attachmentIndex})" title="Download ${homeEsc(attachment.fileName || 'attachment')}">
+      const canPreview = classroomResourceIsPdf(attachment);
+      return `<button type="button" class="home-announcement-attachment" onclick="${canPreview ? 'view' : 'download'}HomeAnnouncementAttachment(${index},'${homeEsc(item.id)}',${attachmentIndex})" title="${canPreview ? 'View' : 'Download'} ${homeEsc(attachment.fileName || 'attachment')}">
         <i class="ti ${homeEsc(classroomResourceIcon(attachment))}"></i>
         <span><strong>${homeEsc(attachment.fileName || 'Attachment')}</strong>${size ? `<small>${homeEsc(size)}</small>` : ''}</span>
-        <i class="ti ti-download"></i>
+        <i class="ti ${canPreview ? 'ti-eye' : 'ti-download'}"></i>
       </button>`;
     }).join('')}</div>`;
   }
@@ -972,10 +979,17 @@
         <textarea id="home-announcement-text-${index}" placeholder="Write an announcement for this classroom..." rows="3" oninput="autoGrowHomeAnnouncement(this)" onfocus="autoGrowHomeAnnouncement(this)"></textarea>
         <input id="home-announcement-file-input-${index}" class="home-announcement-file-input" type="file" multiple onchange="selectHomeAnnouncementFiles(${index},this)">
         <div class="home-announcement-toolbar">
-          <button type="button" class="home-announcement-attach" onclick="document.getElementById('home-announcement-file-input-${index}')?.click()" title="Attach file" aria-label="Attach file"><i class="ti ti-paperclip"></i></button>
+          <button id="home-announcement-attach-${index}" type="button" class="home-announcement-attach" onclick="document.getElementById('home-announcement-file-input-${index}')?.click()" title="Attach file" aria-label="Attach file"><i class="ti ti-paperclip"></i></button>
           <div id="home-announcement-files-${index}" class="home-announcement-selected-files" ${pendingFiles.length ? '' : 'hidden'}>${pendingFiles.map((file,fileIndex)=>`<div class="home-announcement-selected-file"><i class="ti ti-file"></i><span>${homeEsc(file.name || '')}</span><button type="button" onclick="removeHomeAnnouncementFile(${index},${fileIndex})" title="Remove attachment" aria-label="Remove attachment"><i class="ti ti-x"></i></button></div>`).join('')}</div>
-          <span class="home-announcement-helper">Students in this classroom will see this.</span>
           <button id="home-announcement-post-${index}" type="button" class="home-announcement-post" onclick="postHomeClassAnnouncement(${index})"><i class="ti ti-send"></i><span>Post</span></button>
+          <div id="home-announcement-posting-${index}" class="home-announcement-posting" role="status" aria-live="polite" hidden>
+            <span class="home-announcement-posting-spinner" aria-hidden="true"></span>
+            <div class="home-announcement-posting-copy">
+              <div class="home-announcement-posting-meta"><strong>Posting announcement</strong><small id="home-announcement-posting-detail-${index}">Preparing files...</small></div>
+              <div class="home-announcement-posting-progress" role="progressbar" aria-label="Announcement upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+            </div>
+            <span id="home-announcement-posting-percent-${index}" class="home-announcement-posting-percent">0%</span>
+          </div>
         </div>
       </section>`}
       ${announcements.length ? `<div class="home-announcement-feed">${announcements.map(item=>renderAnnouncementCard(item,index,studentMode,homeEsc)).join('')}</div>` : `<div class="home-class-placeholder compact"><p>No announcements posted yet.</p></div>`}
@@ -1072,7 +1086,7 @@
     const groups = classroomResourceGroups(resources);
     return `<div class="home-class-tab-head">
       <h2>Resources</h2>
-      ${studentMode ? `<span class="home-class-tab-count">${resources.length} ${resources.length === 1 ? 'resource' : 'resources'}</span>` : `<button type="button" onclick="openHomeClassResourceModal(${index})"><i class="ti ti-plus"></i><span>Add resource</span></button>`}
+      ${studentMode ? `<span class="home-class-tab-count">${resources.length} ${resources.length === 1 ? 'resource' : 'resources'}</span>` : `<button type="button" onclick="openHomeClassResourceModal(${index})"><i class="ti ti-plus"></i><span>Resource</span></button>`}
     </div>
     ${groups.length ? `<div class="home-resource-list">
       ${groups.map(group=>{
@@ -1210,12 +1224,51 @@
       <h2>Tracker</h2>
       ${studentMode ? '' : `<div class="home-tracker-head-actions">
         ${renderTrackerPercentageLegendToggle(cls,index,homeEsc)}
-        <button type="button" onclick="openHomeTrackerTaskModal(${index},'${homeEsc(activeTerm)}')"><i class="ti ti-plus"></i><span>Add task</span></button>
+        <button type="button" onclick="openHomeTrackerTaskModal(${index},'${homeEsc(activeTerm)}')"><i class="ti ti-plus"></i><span>Task</span></button>
       </div>`}
     </div>
     ${renderTrackerPercentageLegendPanel(cls,index,homeEsc)}
     ${renderTrackerTermNav(index,activeTerm,homeEsc)}
     ${renderTrackerTable(cls,index,activeTerm,homeEsc)}`;
+  }
+
+  const HOME_VASS_INDICATIVE_GRADES = [
+    { grade:'UG', min:0, max:5 },
+    { grade:'E', min:6, max:15 },
+    { grade:'E+', min:16, max:25 },
+    { grade:'D', min:26, max:40 },
+    { grade:'D+', min:41, max:50 },
+    { grade:'C', min:51, max:57 },
+    { grade:'C+', min:58, max:64 },
+    { grade:'B', min:65, max:73 },
+    { grade:'B+', min:74, max:82 },
+    { grade:'A', min:83, max:92 },
+    { grade:'A+', min:93, max:100 }
+  ];
+
+  function classroomVassGradeScale(source){
+    const saved = Array.isArray(source) ? source : [];
+    return HOME_VASS_INDICATIVE_GRADES.map((item,index)=>{
+      const match = saved.find(entry=>String(entry?.grade || '') === item.grade) || saved[index] || {};
+      const min = Number(match.min);
+      const max = Number(match.max);
+      return {
+        grade:item.grade,
+        min:Number.isFinite(min) ? min : item.min,
+        max:Number.isFinite(max) ? max : item.max
+      };
+    });
+  }
+
+  function classroomVassDefaultGradeWeights(semesterExamCount){
+    const sourceCount = Math.max(2,Number(semesterExamCount) + 2);
+    const base = Math.floor(100 / sourceCount);
+    const semesterExams = Array.from({ length:Math.max(0,sourceCount - 2) },()=>base);
+    return {
+      vass:base,
+      semesterExams,
+      indicativeScore:100 - base - semesterExams.reduce((sum,value)=>sum + value,0)
+    };
   }
 
   function classroomVass(cls){
@@ -1248,7 +1301,245 @@
       cls.vass.reportScale[unitKey] = cls.vass.reportScale[unitKey] && typeof cls.vass.reportScale[unitKey] === 'object' ? cls.vass.reportScale[unitKey] : {};
     });
     cls.vass.reportRounding = [0,1,2].includes(Number(cls.vass.reportRounding)) ? Number(cls.vass.reportRounding) : 0;
+    const semesterExamSource = Array.isArray(cls.vass.semesterExams) ? cls.vass.semesterExams : [];
+    cls.vass.semesterExams = semesterExamSource.map((exam,index)=>({
+      id:String(exam?.id || `semester-exam-${index + 1}`),
+      values:exam?.values && typeof exam.values === 'object' ? exam.values : {},
+      heading:String(exam?.heading || '').trim()
+    }));
+    const indicativeSource = Array.isArray(cls.vass.indicativeExams) ? cls.vass.indicativeExams : [];
+    cls.vass.indicativeExams = indicativeSource.map((exam,index)=>({
+      id:String(exam?.id || `indicative-${index + 1}`),
+      scores:exam?.scores && typeof exam.scores === 'object' ? exam.scores : {},
+      grades:exam?.grades && typeof exam.grades === 'object' ? exam.grades : {},
+      scoreHeading:String(exam?.scoreHeading || '').trim(),
+      gradeHeading:String(exam?.gradeHeading || '').trim(),
+      scoreVisible:exam?.scoreVisible !== false,
+      gradeVisible:exam?.gradeVisible !== false,
+      gradeWeights:exam?.gradeWeights && typeof exam.gradeWeights === 'object' ? {
+        vass:Number(exam.gradeWeights.vass) || 0,
+        semesterExams:Array.isArray(exam.gradeWeights.semesterExams) ? exam.gradeWeights.semesterExams.map(value=>Number(value) || 0) : [],
+        indicativeScore:Number(exam.gradeWeights.indicativeScore) || 0
+      } : null,
+      gradeScale:classroomVassGradeScale(exam?.gradeScale)
+    }));
     return cls.vass;
+  }
+
+  function classroomVassSemesterExams(cls,minimumCount=0){
+    const exams = classroomVass(cls).semesterExams;
+    while(exams.length < minimumCount){
+      exams.push({
+        id:`semester-exam-${Date.now()}-${exams.length + 1}-${Math.random().toString(16).slice(2)}`,
+        values:{},
+        heading:''
+      });
+    }
+    return exams;
+  }
+
+  function classroomVassIndicativeExams(cls,minimumCount=0){
+    const exams = classroomVass(cls).indicativeExams;
+    while(exams.length < minimumCount){
+      exams.push({
+        id:`indicative-${Date.now()}-${exams.length + 1}-${Math.random().toString(16).slice(2)}`,
+        scores:{},
+        grades:{},
+        scoreHeading:'',
+        gradeHeading:'',
+        scoreVisible:true,
+        gradeVisible:true,
+        gradeWeights:null,
+        gradeScale:classroomVassGradeScale()
+      });
+    }
+    return exams;
+  }
+
+  function classroomVassRankingConfigPayload(cls){
+    const vass = classroomVass(cls);
+    return {
+      version:1,
+      semesterExams:vass.semesterExams.map(exam=>({
+        id:exam.id,
+        heading:exam.heading || ''
+      })),
+      indicativeExams:vass.indicativeExams.map(exam=>({
+        id:exam.id,
+        scoreHeading:exam.scoreHeading || '',
+        gradeHeading:exam.gradeHeading || '',
+        scoreVisible:exam.scoreVisible !== false,
+        gradeVisible:exam.gradeVisible !== false,
+        gradeWeights:exam.gradeWeights ? {
+          vass:Number(exam.gradeWeights.vass) || 0,
+          semesterExams:[...(exam.gradeWeights.semesterExams || [])].map(value=>Number(value) || 0),
+          indicativeScore:Number(exam.gradeWeights.indicativeScore) || 0
+        } : null,
+        gradeScale:classroomVassGradeScale(exam.gradeScale)
+      }))
+    };
+  }
+
+  function classroomApplyVassRankingConfig(cls,config){
+    if(!config || !Array.isArray(config.semesterExams) || !Array.isArray(config.indicativeExams)) return false;
+    const vass = classroomVass(cls);
+    const localSemester = vass.semesterExams || [];
+    const localIndicative = vass.indicativeExams || [];
+    vass.semesterExams = config.semesterExams.map((shared,index)=>{
+      const local = localSemester.find(item=>item.id === shared?.id) || localSemester[index] || {};
+      return {
+        id:String(shared?.id || local.id || `semester-exam-${index + 1}`),
+        heading:String(shared?.heading || '').trim(),
+        values:local.values && typeof local.values === 'object' ? local.values : {}
+      };
+    });
+    vass.indicativeExams = config.indicativeExams.map((shared,index)=>{
+      const local = localIndicative.find(item=>item.id === shared?.id) || localIndicative[index] || {};
+      return {
+        id:String(shared?.id || local.id || `indicative-${index + 1}`),
+        scores:local.scores && typeof local.scores === 'object' ? local.scores : {},
+        grades:local.grades && typeof local.grades === 'object' ? local.grades : {},
+        scoreHeading:String(shared?.scoreHeading || '').trim(),
+        gradeHeading:String(shared?.gradeHeading || '').trim(),
+        scoreVisible:shared?.scoreVisible !== false,
+        gradeVisible:shared?.gradeVisible !== false,
+        gradeWeights:shared?.gradeWeights && typeof shared.gradeWeights === 'object' ? {
+          vass:Number(shared.gradeWeights.vass) || 0,
+          semesterExams:Array.isArray(shared.gradeWeights.semesterExams) ? shared.gradeWeights.semesterExams.map(value=>Number(value) || 0) : [],
+          indicativeScore:Number(shared.gradeWeights.indicativeScore) || 0
+        } : null,
+        gradeScale:classroomVassGradeScale(shared?.gradeScale)
+      };
+    });
+    return true;
+  }
+
+  function classroomVassRankingScopeKey(cls){
+    const normalise = value=>String(value || '').trim().toLowerCase().replace(/\s+/g,' ');
+    return [normalise(cls?.schoolId || cls?.school_id),normalise(cls?.subject),normalise(cls?.yearLevel || cls?.year_level)].join('|');
+  }
+
+  function applySharedVassRankingConfig(classes,sourceCls,config){
+    let changed = false;
+    classes.forEach(item=>{
+      if(!item?.archived && classroomSameRankCohort(sourceCls,item)) changed = classroomApplyVassRankingConfig(item,config) || changed;
+    });
+    if(changed) saveClassroomClasses(classes);
+    return changed;
+  }
+
+  async function persistHomeVassRankingConfig(cls){
+    const sync = classroomSync();
+    if(!sync?.saveVassRankingConfig) return false;
+    try{
+      await sync.saveVassRankingConfig(cls,classroomVassRankingConfigPayload(cls));
+      return true;
+    }catch(err){
+      console.warn('Could not save shared VASS Ranking configuration',err);
+      if(typeof showToast === 'function') showToast('VASS Ranking saved to this classroom, but the shared school configuration is not available yet.', true);
+      return false;
+    }
+  }
+
+  async function loadHomeVassRankingConfig(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    const sync = classroomSync();
+    if(!cls || !sync?.loadVassRankingConfig) return false;
+    try{
+      let config = await sync.loadVassRankingConfig(cls);
+      if(!config && !isStudentClassroomRole()){
+        const vass = classroomVass(cls);
+        if(vass.semesterExams.length || vass.indicativeExams.length){
+          config = await sync.saveVassRankingConfig(cls,classroomVassRankingConfigPayload(cls));
+        }
+      }
+      if(config) applySharedVassRankingConfig(classes,cls,config);
+      const channelKey = classroomVassRankingScopeKey(cls);
+      if(sync.subscribeVassRankingConfig && channelKey && channelKey !== classroomVassRankingChannelKey){
+        if(classroomVassRankingChannel && sync.unsubscribeVassRankingConfig) await sync.unsubscribeVassRankingConfig(classroomVassRankingChannel);
+        classroomVassRankingChannelKey = channelKey;
+        classroomVassRankingChannel = sync.subscribeVassRankingConfig(cls,nextConfig=>{
+          if(!nextConfig) return;
+          const latestClasses = classroomClasses();
+          const latestSource = latestClasses[classIndex] || cls;
+          if(!applySharedVassRankingConfig(latestClasses,latestSource,nextConfig)) return;
+          if(classroomVassSection === 'rank'){
+            if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+            else if(typeof renderHomePage === 'function') renderHomePage();
+          }
+        });
+      }
+      return !!config;
+    }catch(err){
+      console.warn('Could not load shared VASS Ranking configuration',err);
+      return false;
+    }
+  }
+
+  function classroomVassRankingEntriesPayload(cls){
+    const classroomId = String(cls?.id || cls?.supabaseId || '');
+    return classroomLocalVassRankRows(cls)
+      .filter(row=>String(row.classroomId || '') === classroomId)
+      .map(row=>({
+        studentKey:String(row.studentKey || ''),
+        studentName:String(row.student || 'Student'),
+        vassScore:row.total === null || row.total === undefined || !Number.isFinite(Number(row.total)) ? null : Number(row.total),
+        semesterScores:(row.semesterExams || []).map(value=>value ?? ''),
+        indicativeScores:(row.indicative || []).map(item=>({
+          score:item?.score ?? '',
+          grade:item?.grade ?? ''
+        }))
+      }));
+  }
+
+  async function syncHomeVassRankingEntries(cls){
+    const sync = classroomSync();
+    if(!cls || isStudentClassroomRole() || !sync?.syncVassRankingEntries || !(cls.id || cls.supabaseId)) return false;
+    try{
+      await sync.syncVassRankingEntries(cls,classroomVassRankingEntriesPayload(cls));
+      return true;
+    }catch(err){
+      console.warn('Could not publish this classroom to the school VASS Ranking',err);
+      return false;
+    }
+  }
+
+  async function refreshHomeVassCohortEntries(cls,rerender=false){
+    const sync = classroomSync();
+    if(!cls || !sync?.loadVassRankingEntries) return false;
+    try{
+      classroomVassCohortEntries = await sync.loadVassRankingEntries(cls);
+      if(rerender && classroomVassSection === 'rank'){
+        if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+        else if(typeof renderHomePage === 'function') renderHomePage();
+      }
+      return true;
+    }catch(err){
+      console.warn('Could not load the school VASS Ranking cohort',err);
+      classroomVassCohortEntries = [];
+      return false;
+    }
+  }
+
+  async function loadHomeVassCohortEntries(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    const sync = classroomSync();
+    if(!cls || !sync?.loadVassRankingEntries) return false;
+    const channelKey = classroomVassRankingScopeKey(cls);
+    if(channelKey !== classroomVassCohortChannelKey) classroomVassCohortEntries = [];
+    await syncHomeVassRankingEntries(cls);
+    await refreshHomeVassCohortEntries(cls);
+    if(sync.subscribeVassRankingEntries && channelKey && channelKey !== classroomVassCohortChannelKey){
+      if(classroomVassCohortChannel && sync.unsubscribeVassRankingEntries) await sync.unsubscribeVassRankingEntries(classroomVassCohortChannel);
+      classroomVassCohortChannelKey = channelKey;
+      classroomVassCohortChannel = sync.subscribeVassRankingEntries(cls,()=>{
+        clearTimeout(classroomVassCohortReloadTimer);
+        classroomVassCohortReloadTimer = setTimeout(()=>refreshHomeVassCohortEntries(cls,true),120);
+      });
+    }
+    return true;
   }
 
   function classroomVassUnit(cls,unitKey){
@@ -1497,25 +1788,41 @@
     return classroomSameValue(source?.subject || '', candidate?.subject || '') && classroomSameValue(source?.yearLevel || '', candidate?.yearLevel || '');
   }
 
-  function classroomVassRankRows(cls){
+  function classroomLocalVassRankRows(cls){
     const classes = classroomClasses();
     const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
     const rows = [];
     cohort.forEach(item=>{
+      const classIndex = classes.indexOf(item);
       const units = classroomVassReportColumns(item);
       const unit3Report = units.find(unit=>unit.unitKey === 'unit3');
       const unit4Report = units.find(unit=>unit.unitKey === 'unit4');
       const teacher = classroomTeacherName(item);
+      const semesterExams = classroomVassSemesterExams(item);
+      const indicativeExams = classroomVassIndicativeExams(item);
       classroomActiveStudents(item).forEach(student=>{
         const total = unit3Report && unit4Report ? classroomVassReportStudentTotalForUnits(item,[unit3Report,unit4Report],student) : null;
         rows.push({
+          classIndex,
+          classroomId:item.id || item.supabaseId || '',
+          studentKey:student.key,
+          canEdit:true,
           teacher,
           student: student.firstName || student.name || 'Student',
           total,
-          display: total === null ? '-' : classroomVassReportFormatValue(item,total)
+          display: total === null ? '-' : classroomVassReportFormatValue(item,total),
+          semesterExams:semesterExams.map(exam=>exam.values?.[student.key] ?? ''),
+          indicative:indicativeExams.map(exam=>({
+            score:exam.scores?.[student.key] ?? '',
+            grade:exam.grades?.[student.key] ?? ''
+          }))
         });
       });
     });
+    return rows;
+  }
+
+  function classroomRankVassRows(rows){
     rows.sort((a,b)=>{
       if(a.total === null && b.total === null) return String(a.student).localeCompare(String(b.student), undefined, { sensitivity:'base' });
       if(a.total === null) return 1;
@@ -1535,6 +1842,43 @@
       previous = row.total;
     });
     return rows;
+  }
+
+  function classroomVassRankRows(cls){
+    const localRows = classroomLocalVassRankRows(cls);
+    const localByStudent = new Map(localRows.map(row=>[`${row.classroomId}::${row.studentKey}`,row]));
+    const merged = [];
+    const usedLocal = new Set();
+    (classroomVassCohortEntries || []).forEach(entry=>{
+      const key = `${entry.classroomId || ''}::${entry.studentKey || ''}`;
+      const local = localByStudent.get(key);
+      if(local){
+        usedLocal.add(key);
+        merged.push(local);
+        return;
+      }
+      const total = entry.vassScore === null || entry.vassScore === undefined || !Number.isFinite(Number(entry.vassScore)) ? null : Number(entry.vassScore);
+      merged.push({
+        classIndex:-1,
+        classroomId:entry.classroomId || '',
+        studentKey:'',
+        canEdit:false,
+        teacher:entry.teacherName || 'Teacher',
+        student:entry.studentName || 'Student',
+        total,
+        display:total === null ? '-' : classroomVassReportFormatValue(cls,total),
+        semesterExams:Array.isArray(entry.semesterScores) ? entry.semesterScores : [],
+        indicative:Array.isArray(entry.indicativeScores) ? entry.indicativeScores.map(item=>({
+          score:item?.score ?? '',
+          grade:item?.grade ?? ''
+        })) : []
+      });
+    });
+    localRows.forEach(row=>{
+      const key = `${row.classroomId}::${row.studentKey}`;
+      if(!usedLocal.has(key)) merged.push(row);
+    });
+    return classroomRankVassRows(merged);
   }
 
   function classroomVassReportRoundingLabel(value){
@@ -1652,11 +1996,11 @@
     return `<span class="home-vass-rank-count">${rows.length} ${rows.length === 1 ? 'student' : 'students'}</span>`;
   }
 
-  function renderVassSectionNav(activeSection,homeEsc,rankSummary=''){
+  function renderVassSectionNav(activeSection,classIndex,homeEsc,rankSummary=''){
     const sections = [['unit3','Unit 3'],['unit4','Unit 4'],['report','VASS Report'],['rank','Ranking']];
     return `<div class="home-vass-section-tabs-row">
       <div class="home-vass-section-tabs" role="tablist">
-        ${sections.map(([key,label])=>`<button type="button" class="home-vass-section-tab ${activeSection === key ? 'active' : ''}" onclick="setHomeVassSection('${key}', event)">${homeEsc(label)}</button>`).join('')}
+        ${sections.map(([key,label])=>`<button type="button" class="home-vass-section-tab ${activeSection === key ? 'active' : ''}" onclick="setHomeVassSection('${key}', event, ${classIndex})">${homeEsc(label)}</button>`).join('')}
       </div>
       ${activeSection === 'rank' ? rankSummary : ''}
     </div>`;
@@ -1711,25 +2055,86 @@
     </table></div>`;
   }
 
+  function classroomVassCalculatedIndicativeGrade(row,examIndex,exam){
+    if(!exam) return null;
+    if(!exam.gradeWeights){
+      const availableScores = [
+        row.total,
+        ...(row.semesterExams || []),
+        row.indicative?.[examIndex]?.score
+      ].filter(value=>value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+      if(!availableScores.length) return { grade:'', score:null };
+      const score = availableScores.reduce((sum,value)=>sum + value,0) / availableScores.length;
+      const gradingScore = Math.round(score);
+      const range = classroomVassGradeScale(exam.gradeScale).find(item=>gradingScore >= item.min && gradingScore <= item.max);
+      return { grade:range?.grade || '', score };
+    }
+    const weights = exam.gradeWeights;
+    const sources = [
+      { value:row.total, weight:Number(weights.vass) || 0 },
+      ...(weights.semesterExams || []).map((weight,index)=>({ value:row.semesterExams?.[index], weight:Number(weight) || 0 })),
+      { value:row.indicative?.[examIndex]?.score, weight:Number(weights.indicativeScore) || 0 }
+    ];
+    let score = 0;
+    for(const source of sources){
+      if(source.weight <= 0) continue;
+      if(source.value === '' || source.value === null || source.value === undefined || !Number.isFinite(Number(source.value))){
+        return { grade:'', score:null };
+      }
+      score += Number(source.value) * source.weight / 100;
+    }
+    const scale = classroomVassGradeScale(exam.gradeScale);
+    const gradingScore = Math.round(score);
+    const range = scale.find(item=>gradingScore >= item.min && gradingScore <= item.max);
+    return { grade:range?.grade || '', score };
+  }
+
   function renderVassRank(cls,index,homeEsc){
     let rows = classroomVassRankRows(cls);
+    const semesterExamCount = Math.max(classroomVassSemesterExams(cls).length,0,...rows.map(row=>row.semesterExams?.length || 0));
+    const semesterExams = classroomVassSemesterExams(cls,semesterExamCount);
+    const indicativeCount = Math.max(classroomVassIndicativeExams(cls).length,0,...rows.map(row=>row.indicative?.length || 0));
+    const indicativeExams = classroomVassIndicativeExams(cls,indicativeCount);
     const teachers = [...new Set(rows.map(row=>row.teacher).filter(Boolean))].sort((a,b)=>a.localeCompare(b, undefined, { sensitivity:'base' }));
     if(classroomVassRankTeacherFilter !== 'all' && !teachers.includes(classroomVassRankTeacherFilter)) classroomVassRankTeacherFilter = 'all';
     if(classroomVassRankTeacherFilter !== 'all') rows = rows.filter(row=>row.teacher === classroomVassRankTeacherFilter);
-    return `${rows.length ? `<div class="home-student-table-wrap home-vass-rank-wrap"><table class="home-student-table home-vass-rank-table">
-      <thead><tr><th>Teacher</th><th>Students</th><th>VASS (100)</th><th>Rank</th></tr></thead>
+    const indicativeHeading = (examIndex,type)=>{
+      const customHeading = type === 'Score' ? indicativeExams[examIndex]?.scoreHeading : indicativeExams[examIndex]?.gradeHeading;
+      return customHeading || (indicativeCount === 1 ? `Indicative ${type}` : `Exam ${examIndex + 1} ${type}`);
+    };
+    const semesterExamHeading = examIndex=>semesterExams[examIndex]?.heading || (semesterExamCount === 1 ? 'Semester Exam' : `Semester Exam ${examIndex + 1}`);
+    const studentMode = isStudentClassroomRole();
+    const scoreColumns = Array.from({length:indicativeCount},(_,examIndex)=>examIndex).filter(examIndex=>indicativeExams[examIndex]?.scoreVisible !== false);
+    const gradeColumns = Array.from({length:indicativeCount},(_,examIndex)=>examIndex).filter(examIndex=>indicativeExams[examIndex]?.gradeVisible !== false);
+    const rankTableWidth = 680 + ((semesterExamCount + scoreColumns.length + gradeColumns.length) * 140);
+    return `${rows.length ? `<div class="home-student-table-wrap home-vass-rank-wrap"><table class="home-student-table home-vass-rank-table" style="min-width:${rankTableWidth}px">
+      <thead><tr><th>Teacher</th><th>Students</th><th class="home-vass-rank-vass">VASS (100)</th>${Array.from({length:semesterExamCount},(_,examIndex)=>`<th class="home-vass-indicative-head">${studentMode ? homeEsc(semesterExamHeading(examIndex)) : `<button type="button" class="home-vass-indicative-heading-button" onclick="openHomeVassSemesterExamHeadingModal(${index},${examIndex})">${homeEsc(semesterExamHeading(examIndex))}</button>`}</th>`).join('')}${scoreColumns.map(examIndex=>`<th class="home-vass-indicative-head">${studentMode ? homeEsc(indicativeHeading(examIndex,'Score')) : `<button type="button" class="home-vass-indicative-heading-button" onclick="openHomeVassIndicativeHeadingModal(${index},${examIndex},'score')">${homeEsc(indicativeHeading(examIndex,'Score'))}</button>`}</th>`).join('')}${gradeColumns.map(examIndex=>`<th class="home-vass-indicative-head">${studentMode ? homeEsc(indicativeHeading(examIndex,'Grade')) : `<button type="button" class="home-vass-indicative-heading-button" onclick="openHomeVassIndicativeHeadingModal(${index},${examIndex},'grade')">${homeEsc(indicativeHeading(examIndex,'Grade'))}</button>`}</th>`).join('')}<th class="home-vass-rank-position">Rank</th></tr></thead>
       <tbody>
         ${rows.map(row=>`<tr>
           <td>${homeEsc(row.teacher)}</td>
           <td>${homeEsc(row.student)}</td>
-          <td>${homeEsc(row.display)}</td>
-          <td>${homeEsc(row.rank)}</td>
+          <td class="home-vass-rank-vass">${homeEsc(row.display)}</td>
+          ${Array.from({length:semesterExamCount},(_,examIndex)=>{
+            const value = row.semesterExams?.[examIndex] ?? '';
+            return `<td class="home-vass-indicative-cell">${studentMode || !row.canEdit ? homeEsc(value || '-') : `<input type="text" inputmode="decimal" value="${homeEsc(value)}" aria-label="${homeEsc(semesterExamHeading(examIndex))} for ${homeEsc(row.student)}" onchange="saveHomeVassSemesterExamValue(${row.classIndex},'${classroomJsString(row.studentKey)}',${examIndex},this.value)">`}</td>`;
+          }).join('')}
+          ${scoreColumns.map(examIndex=>{
+            const value = row.indicative?.[examIndex]?.score ?? '';
+            return `<td class="home-vass-indicative-cell">${studentMode || !row.canEdit ? homeEsc(value || '-') : `<input type="text" inputmode="decimal" value="${homeEsc(value)}" aria-label="${homeEsc(indicativeHeading(examIndex,'Score'))} for ${homeEsc(row.student)}" onchange="saveHomeVassIndicativeValue(${row.classIndex},'${classroomJsString(row.studentKey)}',${examIndex},'score',this.value)">`}</td>`;
+          }).join('')}
+          ${gradeColumns.map(examIndex=>{
+            const value = row.indicative?.[examIndex]?.grade ?? '';
+            const calculated = classroomVassCalculatedIndicativeGrade(row,examIndex,indicativeExams[examIndex]);
+            if(calculated) return `<td class="home-vass-indicative-cell home-vass-calculated-grade" ${calculated.score === null ? '' : `title="Weighted score: ${homeEsc(calculated.score.toFixed(2))}"`}>${homeEsc(calculated.grade || '-')}</td>`;
+            return `<td class="home-vass-indicative-cell">${studentMode || !row.canEdit ? homeEsc(value || '-') : `<input type="text" value="${homeEsc(value)}" aria-label="${homeEsc(indicativeHeading(examIndex,'Grade'))} for ${homeEsc(row.student)}" onchange="saveHomeVassIndicativeValue(${row.classIndex},'${classroomJsString(row.studentKey)}',${examIndex},'grade',this.value)">`}</td>`;
+          }).join('')}
+          <td class="home-vass-rank-position">${homeEsc(row.rank)}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>` : `<div class="home-class-placeholder compact"><p>No ranked VASS Report totals are available yet for this subject and year level.</p></div>`}`;
   }
 
-  function renderVassRankFilter(cls,homeEsc){
+  function renderVassRankFilter(cls,index,homeEsc){
     let rows = classroomVassRankRows(cls);
     const teachers = [...new Set(rows.map(row=>row.teacher).filter(Boolean))].sort((a,b)=>a.localeCompare(b, undefined, { sensitivity:'base' }));
     if(classroomVassRankTeacherFilter !== 'all' && !teachers.includes(classroomVassRankTeacherFilter)) classroomVassRankTeacherFilter = 'all';
@@ -1741,6 +2146,8 @@
           ${teachers.map(teacher=>`<option value="${homeEsc(teacher)}" ${teacher === classroomVassRankTeacherFilter ? 'selected' : ''}>${homeEsc(teacher)}</option>`).join('')}
         </select>
       </label>
+      ${isStudentClassroomRole() ? '' : `<button type="button" class="home-vass-add-indicative" onclick="addHomeVassSemesterExam(${index})"><i class="ti ti-plus"></i><span>Semester Exam</span></button>`}
+      ${isStudentClassroomRole() ? '' : `<button type="button" class="home-vass-add-indicative" onclick="addHomeVassIndicativeScore(${index})"><i class="ti ti-plus"></i><span>Indicative Score</span></button>`}
     </div>`;
   }
 
@@ -1759,12 +2166,12 @@
     return `<div class="home-class-tab-head home-vass-head">
       <h2>VASS</h2>
       ${rankMode
-        ? renderVassRankFilter(cls,homeEsc)
+        ? renderVassRankFilter(cls,index,homeEsc)
         : reportMode
         ? `<div class="home-tracker-head-actions">${studentMode ? '' : renderClassroomVassRoundingButton(cls,index)}${renderClassroomVassExportButton(index)}</div>`
-        : studentMode ? '' : `<div class="home-unit-actions"><button type="button" onclick="openHomeUnitAreaModal(${index},'${homeEsc(classroomVassSection)}')"><i class="ti ti-plus"></i><span>Add Area of Study</span></button></div>`}
+        : studentMode ? '' : `<div class="home-unit-actions"><button type="button" onclick="openHomeUnitAreaModal(${index},'${homeEsc(classroomVassSection)}')"><i class="ti ti-plus"></i><span>Area of Study</span></button></div>`}
     </div>
-    ${renderVassSectionNav(classroomVassSection,homeEsc,rankMode ? renderVassRankSummary(cls,homeEsc) : '')}
+    ${renderVassSectionNav(classroomVassSection,index,homeEsc,rankMode ? renderVassRankSummary(cls,homeEsc) : '')}
     ${renderVassUnit(cls,index,classroomVassSection,homeEsc)}`;
   }
 
@@ -1785,9 +2192,15 @@
     return renderClassroomHome(cls,index,homeEsc);
   }
 
-  window.setHomeVassSection = function setHomeVassSection(section,event){
+  window.setHomeVassSection = async function setHomeVassSection(section,event,classIndex){
     event?.preventDefault?.();
     classroomVassSection = ['unit3','unit4','report','rank'].includes(section) ? section : 'unit3';
+    if(classroomVassSection === 'rank' && Number.isInteger(Number(classIndex))){
+      await Promise.all([
+        loadHomeVassRankingConfig(Number(classIndex)),
+        loadHomeVassCohortEntries(Number(classIndex))
+      ]);
+    }
     if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(event?.currentTarget || event?.target || document.querySelector('.home-classroom-wrap'));
     else if(typeof renderHomePage === 'function') renderHomePage();
   };
@@ -1795,6 +2208,321 @@
   window.setHomeVassRankTeacherFilter = function setHomeVassRankTeacherFilter(value){
     classroomVassRankTeacherFilter = value || 'all';
     classroomVassSection = 'rank';
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.addHomeVassIndicativeScore = async function addHomeVassIndicativeScore(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    const nextCount = Math.max(0,...cohort.map(item=>classroomVassIndicativeExams(item).length)) + 1;
+    classroomVassIndicativeExams(cls,nextCount);
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([persistHomeVassData(cls),persistHomeVassRankingConfig(cls)]);
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.addHomeVassSemesterExam = async function addHomeVassSemesterExam(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    const nextCount = Math.max(0,...cohort.map(item=>classroomVassSemesterExams(item).length)) + 1;
+    classroomVassSemesterExams(cls,nextCount);
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([persistHomeVassData(cls),persistHomeVassRankingConfig(cls)]);
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.saveHomeVassSemesterExamValue = async function saveHomeVassSemesterExamValue(classIndex,studentKey,examIndex,value){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cleanExamIndex = Math.max(0,Number(examIndex) || 0);
+    const exam = classroomVassSemesterExams(cls,cleanExamIndex + 1)[cleanExamIndex];
+    const clean = String(value ?? '').trim();
+    if(clean) exam.values[studentKey] = clean;
+    else delete exam.values[studentKey];
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await persistHomeVassData(cls);
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.openHomeVassSemesterExamHeadingModal = function openHomeVassSemesterExamHeadingModal(classIndex,examIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cleanExamIndex = Math.max(0,Number(examIndex) || 0);
+    const exams = classroomVassSemesterExams(cls,cleanExamIndex + 1);
+    const exam = exams[cleanExamIndex];
+    const defaultHeading = exams.length === 1 ? 'Semester Exam' : `Semester Exam ${cleanExamIndex + 1}`;
+    document.getElementById('home-vass-semester-exam-heading-modal-root')?.remove();
+    const shell = document.createElement('div');
+    shell.id = 'home-vass-semester-exam-heading-modal-root';
+    shell.innerHTML = `<button type="button" class="home-modal-scrim" onclick="closeHomeVassSemesterExamHeadingModal()" aria-label="Close semester exam column form"></button>
+      <div class="home-modal home-unit-area-modal home-vass-indicative-heading-modal">
+        <button type="button" class="home-unit-area-close" onclick="closeHomeVassSemesterExamHeadingModal()" aria-label="Close semester exam column form"><i class="ti ti-x"></i></button>
+        <h2 class="home-modal-title">Edit semester exam column</h2>
+        <p class="home-vass-indicative-heading-help">Update the table heading or remove this column.</p>
+        <input id="home-vass-semester-exam-heading-index" type="hidden" value="${cleanExamIndex}">
+        <div class="home-unit-area-form home-vass-indicative-heading-form">
+          <label>Column heading<input id="home-vass-semester-exam-heading-input" type="text" value="${classroomAttr(exam.heading || defaultHeading)}"></label>
+        </div>
+        <div class="home-modal-actions">
+          <button type="button" class="danger" onclick="deleteHomeVassSemesterExamColumn(${classIndex})">Delete</button>
+          <button type="button" onclick="closeHomeVassSemesterExamHeadingModal()">Cancel</button>
+          <button type="button" class="primary" onclick="saveHomeVassSemesterExamHeading(${classIndex})">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(shell);
+    setTimeout(()=>{
+      const input = document.getElementById('home-vass-semester-exam-heading-input');
+      input?.focus();
+      input?.select();
+    },0);
+  };
+
+  window.closeHomeVassSemesterExamHeadingModal = function closeHomeVassSemesterExamHeadingModal(){
+    document.getElementById('home-vass-semester-exam-heading-modal-root')?.remove();
+  };
+
+  window.saveHomeVassSemesterExamHeading = async function saveHomeVassSemesterExamHeading(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const examIndex = Math.max(0,Number(document.getElementById('home-vass-semester-exam-heading-index')?.value) || 0);
+    const heading = String(document.getElementById('home-vass-semester-exam-heading-input')?.value || '').trim();
+    if(!heading){
+      if(typeof showToast === 'function') showToast('Column heading is required.', true);
+      return;
+    }
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    cohort.forEach(item=>{
+      classroomVassSemesterExams(item,examIndex + 1)[examIndex].heading = heading;
+    });
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([...cohort.map(item=>persistHomeVassData(item)),persistHomeVassRankingConfig(cls)]);
+    closeHomeVassSemesterExamHeadingModal();
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.deleteHomeVassSemesterExamColumn = async function deleteHomeVassSemesterExamColumn(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const examIndex = Math.max(0,Number(document.getElementById('home-vass-semester-exam-heading-index')?.value) || 0);
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    cohort.forEach(item=>{
+      const exams = classroomVassSemesterExams(item);
+      if(examIndex < exams.length) exams.splice(examIndex,1);
+      classroomVassIndicativeExams(item).forEach(indicativeExam=>{
+        if(!indicativeExam.gradeWeights || examIndex >= indicativeExam.gradeWeights.semesterExams.length) return;
+        const removedWeight = Number(indicativeExam.gradeWeights.semesterExams.splice(examIndex,1)[0]) || 0;
+        indicativeExam.gradeWeights.indicativeScore = (Number(indicativeExam.gradeWeights.indicativeScore) || 0) + removedWeight;
+      });
+    });
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([...cohort.map(item=>persistHomeVassData(item)),persistHomeVassRankingConfig(cls)]);
+    closeHomeVassSemesterExamHeadingModal();
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.saveHomeVassIndicativeValue = async function saveHomeVassIndicativeValue(classIndex,studentKey,examIndex,field,value){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cleanExamIndex = Math.max(0,Number(examIndex) || 0);
+    const exam = classroomVassIndicativeExams(cls,cleanExamIndex + 1)[cleanExamIndex];
+    const values = field === 'grade' ? exam.grades : exam.scores;
+    const clean = String(value ?? '').trim();
+    if(clean) values[studentKey] = clean;
+    else delete values[studentKey];
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await persistHomeVassData(cls);
+    if(field === 'score'){
+      if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+      else if(typeof renderHomePage === 'function') renderHomePage();
+    }
+  };
+
+  window.openHomeVassIndicativeHeadingModal = function openHomeVassIndicativeHeadingModal(classIndex,examIndex,field){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const cleanExamIndex = Math.max(0,Number(examIndex) || 0);
+    const cleanField = field === 'grade' ? 'grade' : 'score';
+    const exams = classroomVassIndicativeExams(cls,cleanExamIndex + 1);
+    const exam = exams[cleanExamIndex];
+    const typeLabel = cleanField === 'grade' ? 'Grade' : 'Score';
+    const defaultHeading = exams.length === 1 ? `Indicative ${typeLabel}` : `Exam ${cleanExamIndex + 1} ${typeLabel}`;
+    const heading = cleanField === 'grade' ? exam.gradeHeading : exam.scoreHeading;
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    const semesterExamCount = Math.max(0,...cohort.map(item=>classroomVassSemesterExams(item).length));
+    const semesterExams = classroomVassSemesterExams(cls,semesterExamCount);
+    const semesterHeading = index=>semesterExams[index]?.heading || (semesterExamCount === 1 ? 'Semester Exam' : `Semester Exam ${index + 1}`);
+    const weights = exam.gradeWeights || classroomVassDefaultGradeWeights(semesterExamCount);
+    const gradeScale = classroomVassGradeScale(exam.gradeScale);
+    const gradeEditor = cleanField === 'grade' ? `
+      <section class="home-vass-grade-section">
+        <div class="home-vass-grade-section-head">
+          <div><h3>Grade weighting</h3><p>Choose how much each available score contributes to the final grade.</p></div>
+          <strong id="home-vass-grade-weight-total">Total: 0%</strong>
+        </div>
+        <div class="home-vass-grade-weight-table">
+          <label><span>VASS (100)</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-vass" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.vass ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>
+          ${Array.from({length:semesterExamCount},(_,semesterIndex)=>`<label><span>${classroomAttr(semesterHeading(semesterIndex))}</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-semester-${semesterIndex}" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.semesterExams?.[semesterIndex] ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>`).join('')}
+          <label><span>${classroomAttr((exams[cleanExamIndex]?.scoreHeading || (exams.length === 1 ? 'Indicative Score' : `Exam ${cleanExamIndex + 1} Score`)))}</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-score" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.indicativeScore ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>
+        </div>
+      </section>
+      <section class="home-vass-grade-section">
+        <div class="home-vass-grade-section-head"><div><h3>Grading scale</h3><p>Edit the score range. Grade letters remain fixed.</p></div></div>
+        <div class="home-vass-grade-scale-table">
+          <div class="home-vass-grade-scale-head"><span>Score range</span><span>Grade</span></div>
+          ${gradeScale.map((range,rangeIndex)=>`<div class="home-vass-grade-scale-row">
+            <span class="home-vass-grade-range"><input id="home-vass-grade-scale-min-${rangeIndex}" type="number" min="0" max="100" step="1" value="${classroomAttr(range.min)}"><span>to</span><input id="home-vass-grade-scale-max-${rangeIndex}" type="number" min="0" max="100" step="1" value="${classroomAttr(range.max)}"></span>
+            <strong>${classroomAttr(range.grade)}</strong>
+          </div>`).join('')}
+        </div>
+      </section>` : '';
+    document.getElementById('home-vass-indicative-heading-modal-root')?.remove();
+    const shell = document.createElement('div');
+    shell.id = 'home-vass-indicative-heading-modal-root';
+    shell.innerHTML = `<button type="button" class="home-modal-scrim" onclick="closeHomeVassIndicativeHeadingModal()" aria-label="Close indicative column form"></button>
+      <div class="home-modal home-unit-area-modal home-vass-indicative-heading-modal ${cleanField === 'grade' ? 'home-vass-indicative-grade-modal' : ''}">
+        <button type="button" class="home-unit-area-close" onclick="closeHomeVassIndicativeHeadingModal()" aria-label="Close indicative column form"><i class="ti ti-x"></i></button>
+        <h2 class="home-modal-title">Edit indicative ${cleanField} column</h2>
+        <p class="home-vass-indicative-heading-help">${cleanField === 'grade' ? 'Set the heading, grade weighting, and score ranges for this indicative grade.' : 'Update the table heading or remove this column.'}</p>
+        <input id="home-vass-indicative-heading-index" type="hidden" value="${cleanExamIndex}">
+        <input id="home-vass-indicative-heading-field" type="hidden" value="${cleanField}">
+        <div class="home-unit-area-form home-vass-indicative-heading-form">
+          <label>Column heading<input id="home-vass-indicative-heading-input" type="text" value="${classroomAttr(heading || defaultHeading)}"></label>
+        </div>
+        ${gradeEditor}
+        <div class="home-modal-actions">
+          ${cleanField === 'score' ? `<button type="button" class="danger" onclick="deleteHomeVassIndicativeColumn(${classIndex})">Delete</button>` : ''}
+          <button type="button" onclick="closeHomeVassIndicativeHeadingModal()">Cancel</button>
+          <button type="button" class="primary" onclick="saveHomeVassIndicativeHeading(${classIndex})">Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(shell);
+    if(cleanField === 'grade') updateHomeVassGradeWeightTotal();
+    setTimeout(()=>{
+      const input = document.getElementById('home-vass-indicative-heading-input');
+      input?.focus();
+      input?.select();
+    },0);
+  };
+
+  window.closeHomeVassIndicativeHeadingModal = function closeHomeVassIndicativeHeadingModal(){
+    document.getElementById('home-vass-indicative-heading-modal-root')?.remove();
+  };
+
+  window.updateHomeVassGradeWeightTotal = function updateHomeVassGradeWeightTotal(){
+    const total = [...document.querySelectorAll('#home-vass-indicative-heading-modal-root [data-vass-grade-weight]')]
+      .reduce((sum,input)=>sum + (Number(input.value) || 0),0);
+    const output = document.getElementById('home-vass-grade-weight-total');
+    if(!output) return;
+    output.textContent = `Total: ${total}%`;
+    output.classList.toggle('invalid',Math.abs(total - 100) > 0.001);
+  };
+
+  window.saveHomeVassIndicativeHeading = async function saveHomeVassIndicativeHeading(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const examIndex = Math.max(0,Number(document.getElementById('home-vass-indicative-heading-index')?.value) || 0);
+    const field = document.getElementById('home-vass-indicative-heading-field')?.value === 'grade' ? 'grade' : 'score';
+    const heading = String(document.getElementById('home-vass-indicative-heading-input')?.value || '').trim();
+    if(!heading){
+      if(typeof showToast === 'function') showToast('Column heading is required.', true);
+      return;
+    }
+    let gradeWeights = null;
+    let gradeScale = null;
+    if(field === 'grade'){
+      const weightInputs = [...document.querySelectorAll('#home-vass-indicative-heading-modal-root [data-vass-grade-weight]')];
+      const weightValues = weightInputs.map(input=>Number(input.value));
+      if(weightValues.some(value=>!Number.isFinite(value) || value < 0 || value > 100)){
+        if(typeof showToast === 'function') showToast('Each grade weighting must be between 0% and 100%.', true);
+        return;
+      }
+      const weightTotal = weightValues.reduce((sum,value)=>sum + value,0);
+      if(Math.abs(weightTotal - 100) > 0.001){
+        if(typeof showToast === 'function') showToast('Grade weightings must total 100%.', true);
+        return;
+      }
+      const semesterCount = Math.max(0,weightValues.length - 2);
+      gradeWeights = {
+        vass:weightValues[0],
+        semesterExams:weightValues.slice(1,1 + semesterCount),
+        indicativeScore:weightValues[weightValues.length - 1]
+      };
+      gradeScale = HOME_VASS_INDICATIVE_GRADES.map((item,index)=>({
+        grade:item.grade,
+        min:Number(document.getElementById(`home-vass-grade-scale-min-${index}`)?.value),
+        max:Number(document.getElementById(`home-vass-grade-scale-max-${index}`)?.value)
+      }));
+      if(gradeScale.some(range=>!Number.isFinite(range.min) || !Number.isFinite(range.max) || range.min < 0 || range.max > 100 || range.min > range.max)){
+        if(typeof showToast === 'function') showToast('Each grading range must be between 0 and 100, with the lower score first.', true);
+        return;
+      }
+      const continuous = gradeScale[0].min === 0 && gradeScale[gradeScale.length - 1].max === 100 && gradeScale.every((range,index)=>index === 0 || range.min === gradeScale[index - 1].max + 1);
+      if(!continuous){
+        if(typeof showToast === 'function') showToast('Grading ranges must run continuously from 0 to 100 without gaps or overlaps.', true);
+        return;
+      }
+    }
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    cohort.forEach(item=>{
+      const exam = classroomVassIndicativeExams(item,examIndex + 1)[examIndex];
+      if(field === 'grade'){
+        exam.gradeHeading = heading;
+        exam.gradeWeights = {
+          vass:gradeWeights.vass,
+          semesterExams:[...gradeWeights.semesterExams],
+          indicativeScore:gradeWeights.indicativeScore
+        };
+        exam.gradeScale = gradeScale.map(range=>({ ...range }));
+      }
+      else exam.scoreHeading = heading;
+    });
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([...cohort.map(item=>persistHomeVassData(item)),persistHomeVassRankingConfig(cls)]);
+    closeHomeVassIndicativeHeadingModal();
+    if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
+    else if(typeof renderHomePage === 'function') renderHomePage();
+  };
+
+  window.deleteHomeVassIndicativeColumn = async function deleteHomeVassIndicativeColumn(classIndex){
+    const classes = classroomClasses();
+    const cls = classes[classIndex];
+    if(!cls || isStudentClassroomRole()) return;
+    const examIndex = Math.max(0,Number(document.getElementById('home-vass-indicative-heading-index')?.value) || 0);
+    const field = document.getElementById('home-vass-indicative-heading-field')?.value === 'grade' ? 'grade' : 'score';
+    if(field !== 'score') return;
+    const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
+    cohort.forEach(item=>{
+      const exams = classroomVassIndicativeExams(item,examIndex + 1);
+      exams.splice(examIndex,1);
+    });
+    classroomVassSection = 'rank';
+    saveClassroomClasses(classes);
+    await Promise.all([...cohort.map(item=>persistHomeVassData(item)),persistHomeVassRankingConfig(cls)]);
+    closeHomeVassIndicativeHeadingModal();
     if(typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll(document.querySelector('.home-classroom-wrap'));
     else if(typeof renderHomePage === 'function') renderHomePage();
   };
@@ -2035,6 +2763,7 @@
     if(sync?.saveVassData && (cls.id || cls.supabaseId)){
       try{
         await sync.saveVassData(cls, classroomVass(cls));
+        await syncHomeVassRankingEntries(cls);
       }catch(err){
         console.warn('Could not save VASS data to Supabase', err);
         if(typeof showToast === 'function') showToast('VASS saved locally, but Supabase did not save it yet.', true);
@@ -2239,6 +2968,36 @@
     refreshHomeAnnouncementFiles(index);
   };
 
+  function setHomeAnnouncementPostingState(index,state={}){
+    const posting = state.posting !== false;
+    const percent = Math.max(0,Math.min(100,Math.round(Number(state.percent) || 0)));
+    const textarea = document.getElementById(`home-announcement-text-${index}`);
+    const input = document.getElementById(`home-announcement-file-input-${index}`);
+    const attach = document.getElementById(`home-announcement-attach-${index}`);
+    const post = document.getElementById(`home-announcement-post-${index}`);
+    const status = document.getElementById(`home-announcement-posting-${index}`);
+    const detail = document.getElementById(`home-announcement-posting-detail-${index}`);
+    const percentLabel = document.getElementById(`home-announcement-posting-percent-${index}`);
+    const progress = status?.querySelector('.home-announcement-posting-progress');
+    const progressFill = progress?.querySelector('span');
+    if(textarea) textarea.disabled = posting;
+    if(input) input.disabled = posting;
+    if(attach) attach.disabled = posting;
+    if(post){
+      post.disabled = posting;
+      const label = post.querySelector('span');
+      if(label) label.textContent = posting ? 'Posting...' : 'Post';
+    }
+    document.querySelectorAll(`#home-announcement-files-${index} button`).forEach(button=>button.disabled = posting);
+    if(status) status.hidden = !posting;
+    if(detail) detail.textContent = state.detail || 'Preparing files...';
+    if(percentLabel) percentLabel.textContent = `${percent}%`;
+    if(progress){
+      progress.setAttribute('aria-valuenow',String(percent));
+      if(progressFill) progressFill.style.width = `${percent}%`;
+    }
+  }
+
   window.postHomeClassAnnouncement = async function postHomeClassAnnouncement(index){
     const textarea = document.getElementById(`home-announcement-text-${index}`);
     const text = textarea?.value?.trim();
@@ -2254,11 +3013,20 @@
       if(typeof showToast === 'function') showToast('File attachments require an online classroom.', true);
       return;
     }
-    const postButton = document.getElementById(`home-announcement-post-${index}`);
-    if(postButton) postButton.disabled = true;
+    setHomeAnnouncementPostingState(index,{
+      posting:true,
+      percent:files.length ? 2 : 45,
+      detail:files.length ? `Preparing ${files.length} ${files.length === 1 ? 'file' : 'files'}...` : 'Publishing announcement...'
+    });
     if(sync?.createAnnouncement && classes[index].id){
       try{
-        const saved = await sync.createAnnouncement(classes[index], text, files);
+        const saved = await sync.createAnnouncement(classes[index], text, files,progress=>{
+          setHomeAnnouncementPostingState(index,{
+            posting:true,
+            percent:progress?.percent,
+            detail:progress?.detail || 'Posting announcement...'
+          });
+        });
         classes[index].announcements = Array.isArray(classes[index].announcements) ? classes[index].announcements : [];
         classes[index].announcements.unshift(saved);
         classroomAnnouncementFiles.delete(index);
@@ -2269,7 +3037,7 @@
       }catch(err){
         console.warn('Could not save announcement to Supabase:', err);
         if(typeof showToast === 'function') showToast(err?.message || 'Could not post announcement.', true);
-        if(postButton) postButton.disabled = false;
+        setHomeAnnouncementPostingState(index,{ posting:false });
         return;
       }
     }
@@ -2316,6 +3084,40 @@
     document.body.appendChild(link);
     link.click();
     link.remove();
+  };
+
+  window.viewHomeAnnouncementAttachment = async function viewHomeAnnouncementAttachment(classIndex,announcementId,attachmentIndex=0){
+    const classes = classroomClasses();
+    const announcement = classes[classIndex] ? classroomAnnouncements(classes[classIndex]).find(item=>item.id === announcementId) : null;
+    const attachments = Array.isArray(announcement?.attachments) && announcement.attachments.length
+      ? announcement.attachments
+      : announcement?.attachment ? [announcement.attachment] : [];
+    const attachment = attachments[attachmentIndex];
+    if(!attachment) return;
+    if(!classroomResourceIsPdf(attachment)){
+      await downloadHomeAnnouncementAttachment(classIndex,announcementId,attachmentIndex);
+      return;
+    }
+    const sync = classroomSync();
+    let url = attachment.fileUrl || '';
+    if(sync?.getClassroomResourceViewUrl){
+      try{
+        url = await sync.getClassroomResourceViewUrl(attachment);
+      }catch(err){
+        console.warn('Could not create announcement PDF view link:', err);
+      }
+    }else if(sync?.getClassroomResourceDownloadUrl){
+      try{
+        url = await sync.getClassroomResourceDownloadUrl(attachment);
+      }catch(err){
+        console.warn('Could not create announcement PDF link:', err);
+      }
+    }
+    if(!url){
+      if(typeof showToast === 'function') showToast('This PDF is not available to view yet.', true);
+      return;
+    }
+    openHomeClassPdfPreview(attachment,url);
   };
 
   window.startHomeClassAnnouncementEdit = function startHomeClassAnnouncementEdit(index,id){
@@ -3400,7 +4202,7 @@
     shell.id = 'home-class-resource-modal-root';
     shell.innerHTML = `<button type="button" class="home-modal-scrim" onclick="closeHomeClassResourceModal()" aria-label="Close resource form"></button>
       <div class="home-unit-area-modal home-resource-modal" role="dialog" aria-modal="true" aria-labelledby="home-resource-modal-title">
-        <button type="button" class="home-unit-area-close" onclick="closeHomeClassResourceModal()" aria-label="Close resource form"><i class="ti ti-x"></i></button>
+        <button id="home-resource-close" type="button" class="home-unit-area-close" onclick="closeHomeClassResourceModal()" aria-label="Close resource form"><i class="ti ti-x"></i></button>
         <h3 class="home-modal-title" id="home-resource-modal-title">${groupResources.length ? 'Edit Resource' : 'Add Resource'}</h3>
         <div class="home-resource-form">
           <input id="home-resource-edit-title" type="hidden" value="${classroomAttr(editTitle)}">
@@ -3421,11 +4223,19 @@
             <input id="home-resource-file" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp,.txt" onchange="refreshHomeClassResourceFiles()">
           </label>
           <div id="home-resource-selected-files" class="home-resource-selected-files" aria-live="polite"></div>
+          <div id="home-resource-uploading" class="home-resource-uploading" role="status" aria-live="polite" hidden>
+            <span class="home-resource-uploading-spinner" aria-hidden="true"></span>
+            <div class="home-resource-uploading-copy">
+              <div class="home-resource-uploading-meta"><strong>Uploading resources</strong><small id="home-resource-uploading-detail">Preparing files...</small></div>
+              <div class="home-resource-uploading-progress" role="progressbar" aria-label="Resource upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+            </div>
+            <span id="home-resource-uploading-percent" class="home-resource-uploading-percent">0%</span>
+          </div>
         </div>
         <div class="home-modal-actions">
-          ${groupResources.length ? `<button type="button" class="danger" onclick="deleteHomeClassResourceGroup(${classIndex},'${classroomJsString(editTitle)}')">Delete</button>` : '<span></span>'}
-          <button type="button" onclick="closeHomeClassResourceModal()">Cancel</button>
-          <button type="button" class="primary" onclick="saveHomeClassResource(${classIndex},'${classroomJsString(resource.id || '')}')">Save</button>
+          ${groupResources.length ? `<button id="home-resource-delete" type="button" class="danger" onclick="deleteHomeClassResourceGroup(${classIndex},'${classroomJsString(editTitle)}')">Delete</button>` : '<span></span>'}
+          <button id="home-resource-cancel" type="button" onclick="closeHomeClassResourceModal()">Cancel</button>
+          <button id="home-resource-save" type="button" class="primary" onclick="saveHomeClassResource(${classIndex},'${classroomJsString(resource.id || '')}')"><span>Save</span></button>
         </div>
       </div>`;
     document.body.appendChild(shell);
@@ -3489,6 +4299,28 @@
     document.querySelector(`.home-resource-existing-file[data-resource-id="${CSS.escape(String(resourceId || ''))}"]`)?.remove();
   };
 
+  function setHomeResourceUploadingState(state={}){
+    const uploading = state.uploading !== false;
+    const percent = Math.max(0,Math.min(100,Math.round(Number(state.percent) || 0)));
+    const modal = document.querySelector('.home-resource-modal');
+    const status = document.getElementById('home-resource-uploading');
+    const detail = document.getElementById('home-resource-uploading-detail');
+    const percentLabel = document.getElementById('home-resource-uploading-percent');
+    const progress = status?.querySelector('.home-resource-uploading-progress');
+    const progressFill = progress?.querySelector('span');
+    modal?.querySelectorAll('input,button').forEach(control=>control.disabled = uploading);
+    const saveButton = document.getElementById('home-resource-save');
+    const saveLabel = saveButton?.querySelector('span');
+    if(saveLabel) saveLabel.textContent = uploading ? 'Uploading...' : 'Save';
+    if(status) status.hidden = !uploading;
+    if(detail) detail.textContent = state.detail || 'Preparing files...';
+    if(percentLabel) percentLabel.textContent = `${percent}%`;
+    if(progress){
+      progress.setAttribute('aria-valuenow',String(percent));
+      if(progressFill) progressFill.style.width = `${percent}%`;
+    }
+  }
+
   window.saveHomeClassResource = async function saveHomeClassResource(classIndex,resourceId=''){
     const classes = classroomClasses();
     const cls = classes[classIndex];
@@ -3525,6 +4357,11 @@
       if(typeof showToast === 'function') showToast('File upload needs Supabase. Set up classroom resources in Supabase first.', true);
       return;
     }
+    setHomeResourceUploadingState({
+      uploading:true,
+      percent:files.length ? 2 : 40,
+      detail:files.length ? `Preparing ${files.length} ${files.length === 1 ? 'file' : 'files'}...` : 'Saving resource changes...'
+    });
     const now = new Date().toISOString();
     const savedItems = [];
     for(const removed of removedExisting){
@@ -3534,6 +4371,7 @@
         }catch(err){
           console.warn('Could not delete removed resource from Supabase:', err);
           if(typeof showToast === 'function') showToast(err?.message || 'Could not remove resource file.', true);
+          setHomeResourceUploadingState({ uploading:false });
           return;
         }
       }
@@ -3552,12 +4390,14 @@
         }catch(err){
           console.warn('Could not update resource in Supabase:', err);
           if(typeof showToast === 'function') showToast(err?.message || 'Could not update resource.', true);
+          setHomeResourceUploadingState({ uploading:false });
           return;
         }
       }
       savedItems.push(saved);
     }
-    for(const currentFile of files){
+    for(let fileIndex=0;fileIndex<files.length;fileIndex++){
+      const currentFile = files[fileIndex];
       const id = crypto?.randomUUID?.() || `resource-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       const payload = {
         id,
@@ -3574,15 +4414,25 @@
       let saved = payload;
       if(sync?.saveClassroomResource && cls.id){
         try{
-          saved = await sync.saveClassroomResource(cls,payload,currentFile);
+          saved = await sync.saveClassroomResource(cls,payload,currentFile,progress=>{
+            const fraction = Math.max(0,Math.min(1,Number(progress?.fraction) || 0));
+            const overall = 5 + (((fileIndex + fraction) / Math.max(1,files.length)) * 90);
+            setHomeResourceUploadingState({
+              uploading:true,
+              percent:overall,
+              detail:`File ${fileIndex + 1} of ${files.length} · ${progress?.detail || currentFile.name || 'Resource file'}`
+            });
+          });
         }catch(err){
           console.warn('Could not save resource to Supabase:', err);
           if(typeof showToast === 'function') showToast(err?.message || 'Could not save resource.', true);
+          setHomeResourceUploadingState({ uploading:false });
           return;
         }
       }
       savedItems.push(saved);
     }
+    setHomeResourceUploadingState({ uploading:true, percent:100, detail:'Resources saved.' });
     const groupIds = new Set(existingGroup.map(item=>item.id));
     const nextResources = resources.filter(item=>!groupIds.has(item.id)).concat(savedItems);
     cls.resources = nextResources.sort((a,b)=>String(b.createdAt || '').localeCompare(String(a.createdAt || '')));

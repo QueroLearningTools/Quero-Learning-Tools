@@ -694,6 +694,151 @@
     return true;
   }
 
+  function vassRankingScope(cls){
+    const normalise = value => String(value || '').trim().toLowerCase().replace(/\s+/g,' ');
+    return {
+      schoolId:String(cls?.schoolId || cls?.school_id || currentSchoolId() || '').trim(),
+      subject:String(cls?.subject || '').trim(),
+      subjectKey:normalise(cls?.subject),
+      yearLevel:String(cls?.yearLevel || cls?.year_level || '').trim(),
+      yearLevelKey:normalise(cls?.yearLevel || cls?.year_level)
+    };
+  }
+
+  async function loadVassRankingConfig(cls){
+    if(!hasClient()) return null;
+    const scope = vassRankingScope(cls);
+    if(!scope.schoolId || !scope.subjectKey || !scope.yearLevelKey) return null;
+    const { data, error } = await supabaseClient
+      .from('vass_ranking_configs')
+      .select('school_id,subject,subject_key,year_level,year_level_key,config,updated_at')
+      .eq('school_id',scope.schoolId)
+      .eq('subject_key',scope.subjectKey)
+      .eq('year_level_key',scope.yearLevelKey)
+      .maybeSingle();
+    if(error) throw error;
+    return data?.config && typeof data.config === 'object' ? data.config : null;
+  }
+
+  async function saveVassRankingConfig(cls,config){
+    if(!hasClient()) return null;
+    const scope = vassRankingScope(cls);
+    if(!scope.schoolId || !scope.subjectKey || !scope.yearLevelKey) throw new Error('School, subject and year level are required to share VASS Ranking columns.');
+    const authUserId = await currentAuthUserId();
+    const { data, error } = await supabaseClient
+      .from('vass_ranking_configs')
+      .upsert({
+        school_id:scope.schoolId,
+        subject:scope.subject,
+        subject_key:scope.subjectKey,
+        year_level:scope.yearLevel,
+        year_level_key:scope.yearLevelKey,
+        config:config || {},
+        updated_by:authUserId || null,
+        updated_at:nowIso()
+      }, { onConflict:'school_id,subject_key,year_level_key' })
+      .select('config')
+      .single();
+    if(error) throw error;
+    return data?.config || config || {};
+  }
+
+  function subscribeVassRankingConfig(cls,onChange){
+    if(!hasClient() || typeof onChange !== 'function') return null;
+    const scope = vassRankingScope(cls);
+    if(!scope.schoolId || !scope.subjectKey || !scope.yearLevelKey) return null;
+    const channelName = `vass-ranking-${scope.schoolId}-${scope.subjectKey}-${scope.yearLevelKey}`.replace(/[^a-z0-9_-]+/gi,'-').slice(0,100);
+    return supabaseClient
+      .channel(channelName)
+      .on('postgres_changes', {
+        event:'*',
+        schema:'public',
+        table:'vass_ranking_configs',
+        filter:`school_id=eq.${scope.schoolId}`
+      },payload=>{
+        const row = payload?.new || {};
+        if(row.subject_key !== scope.subjectKey || row.year_level_key !== scope.yearLevelKey) return;
+        onChange(row.config && typeof row.config === 'object' ? row.config : null);
+      })
+      .subscribe();
+  }
+
+  async function unsubscribeVassRankingConfig(channel){
+    if(!hasClient() || !channel) return;
+    try{ await supabaseClient.removeChannel(channel); }catch(err){ console.warn('Could not close VASS Ranking subscription:',err); }
+  }
+
+  function vassRankingEntryFromRow(row){
+    return {
+      id:row.id,
+      classroomId:row.classroom_id,
+      schoolId:row.school_id,
+      subject:row.subject || '',
+      subjectKey:row.subject_key || '',
+      yearLevel:row.year_level || '',
+      yearLevelKey:row.year_level_key || '',
+      teacherId:row.teacher_id || '',
+      teacherName:row.teacher_name || 'Teacher',
+      studentKey:row.student_key || '',
+      studentName:row.student_name || 'Student',
+      vassScore:row.vass_score === null || row.vass_score === undefined ? null : Number(row.vass_score),
+      semesterScores:Array.isArray(row.semester_scores) ? row.semester_scores : [],
+      indicativeScores:Array.isArray(row.indicative_scores) ? row.indicative_scores : [],
+      updatedAt:row.updated_at || ''
+    };
+  }
+
+  async function syncVassRankingEntries(cls,entries){
+    if(!hasClient() || !(cls?.id || cls?.supabaseId)) return 0;
+    const { data, error } = await supabaseClient.rpc('sync_my_vass_ranking_entries', {
+      input_classroom_id:cls.id || cls.supabaseId,
+      input_entries:Array.isArray(entries) ? entries : []
+    });
+    if(error) throw error;
+    return Number(data) || 0;
+  }
+
+  async function loadVassRankingEntries(cls){
+    if(!hasClient()) return [];
+    const scope = vassRankingScope(cls);
+    if(!scope.schoolId || !scope.subjectKey || !scope.yearLevelKey) return [];
+    const { data, error } = await supabaseClient
+      .from('vass_ranking_entries')
+      .select('id,classroom_id,school_id,subject,subject_key,year_level,year_level_key,teacher_id,teacher_name,student_key,student_name,vass_score,semester_scores,indicative_scores,updated_at')
+      .eq('school_id',scope.schoolId)
+      .eq('subject_key',scope.subjectKey)
+      .eq('year_level_key',scope.yearLevelKey)
+      .order('teacher_name',{ ascending:true })
+      .order('student_name',{ ascending:true });
+    if(error) throw error;
+    return (data || []).map(vassRankingEntryFromRow);
+  }
+
+  function subscribeVassRankingEntries(cls,onChange){
+    if(!hasClient() || typeof onChange !== 'function') return null;
+    const scope = vassRankingScope(cls);
+    if(!scope.schoolId || !scope.subjectKey || !scope.yearLevelKey) return null;
+    const channelName = `vass-ranking-entries-${scope.schoolId}-${scope.subjectKey}-${scope.yearLevelKey}`.replace(/[^a-z0-9_-]+/gi,'-').slice(0,100);
+    return supabaseClient
+      .channel(channelName)
+      .on('postgres_changes', {
+        event:'*',
+        schema:'public',
+        table:'vass_ranking_entries',
+        filter:`school_id=eq.${scope.schoolId}`
+      },payload=>{
+        const row = payload?.new || payload?.old || {};
+        if(row.subject_key !== scope.subjectKey || row.year_level_key !== scope.yearLevelKey) return;
+        onChange(payload);
+      })
+      .subscribe();
+  }
+
+  async function unsubscribeVassRankingEntries(channel){
+    if(!hasClient() || !channel) return;
+    try{ await supabaseClient.removeChannel(channel); }catch(err){ console.warn('Could not close VASS cohort subscription:',err); }
+  }
+
   async function joinClassByCode(code){
     if(!hasClient()) throw new Error('Sign in to join a classroom.');
     const { data, error } = await supabaseClient.rpc('join_classroom_by_code', {
@@ -706,14 +851,26 @@
     return data?.[0] || data || null;
   }
 
-  async function createAnnouncement(cls, text, files=[]){
+  async function createAnnouncement(cls, text, files=[],onProgress=null){
     if(!hasClient() || !(cls?.id || cls?.supabaseId)) return null;
     const id = crypto?.randomUUID?.() || `announcement-${Date.now()}`;
     const selectedFiles = Array.from(files || []).filter(Boolean);
     const attachments = [];
+    const reportProgress = payload=>{
+      if(typeof onProgress === 'function') onProgress(payload);
+    };
     try{
       for(let index=0;index<selectedFiles.length;index++){
         const file = selectedFiles[index];
+        const startPercent = Math.max(2,Math.round((index / selectedFiles.length) * 90));
+        reportProgress({
+          stage:'uploading',
+          current:index + 1,
+          total:selectedFiles.length,
+          fileName:file.name || 'Attachment',
+          percent:startPercent,
+          detail:`Uploading file ${index + 1} of ${selectedFiles.length}: ${file.name || 'Attachment'}`
+        });
         const fileInfo = await uploadClassroomResourceFile(cls, file, `announcement-${id}-${index + 1}`);
         attachments.push({
           fileName:file.name || 'Attachment',
@@ -722,12 +879,27 @@
           filePath:fileInfo.path,
           fileUrl:fileInfo.url
         });
+        reportProgress({
+          stage:'uploaded',
+          current:index + 1,
+          total:selectedFiles.length,
+          fileName:file.name || 'Attachment',
+          percent:Math.round(((index + 1) / selectedFiles.length) * 90),
+          detail:`Uploaded file ${index + 1} of ${selectedFiles.length}`
+        });
       }
     }catch(error){
       const paths = attachments.map(item=>item.filePath).filter(Boolean);
       if(paths.length) await supabaseClient.storage.from('classroom-resources').remove(paths);
       throw error;
     }
+    reportProgress({
+      stage:'saving',
+      current:selectedFiles.length,
+      total:selectedFiles.length,
+      percent:selectedFiles.length ? 95 : 60,
+      detail:'Saving announcement...'
+    });
     const { data, error } = await supabaseClient.from('classroom_announcements').insert({
       id,
       classroom_id: cls.id || cls.supabaseId,
@@ -742,6 +914,13 @@
       if(paths.length) await supabaseClient.storage.from('classroom-resources').remove(paths);
       throw error;
     }
+    reportProgress({
+      stage:'complete',
+      current:selectedFiles.length,
+      total:selectedFiles.length,
+      percent:100,
+      detail:'Announcement posted.'
+    });
     return announcementFromRow(data);
   }
 
@@ -824,12 +1003,20 @@
     return data?.signedUrl || resource.previewFileUrl || resource.fileUrl || '';
   }
 
-  async function saveClassroomResource(cls,resource,file=null){
+  async function saveClassroomResource(cls,resource,file=null,onProgress=null){
     if(!hasClient() || !(cls?.id || cls?.supabaseId)) return null;
     const classroomId = cls.id || cls.supabaseId;
     const id = String(resource?.id || crypto?.randomUUID?.() || `resource-${Date.now()}`).trim();
+    const fileName = file?.name || resource?.fileName || 'Resource file';
+    const reportProgress = payload=>{
+      if(typeof onProgress === 'function') onProgress(payload);
+    };
     let fileInfo = { path:resource?.filePath || '', url:resource?.fileUrl || '' };
-    if(file) fileInfo = await uploadClassroomResourceFile(cls,file,id);
+    if(file){
+      reportProgress({ stage:'uploading', fraction:0.05, detail:`Uploading ${fileName}...` });
+      fileInfo = await uploadClassroomResourceFile(cls,file,id);
+      reportProgress({ stage:'uploaded', fraction:0.72, detail:`Uploaded ${fileName}` });
+    }
     const isPdf = String(file?.type || resource?.fileType || '').toLowerCase().includes('pdf') || String(file?.name || resource?.fileName || '').toLowerCase().endsWith('.pdf');
     const previewFilePath = isPdf ? fileInfo.path : resource?.previewFilePath || '';
     const previewFileUrl = isPdf ? fileInfo.url : resource?.previewFileUrl || '';
@@ -850,20 +1037,24 @@
       uploaded_by_name: currentDisplayName(),
       updated_at: nowIso()
     };
+    reportProgress({ stage:'saving', fraction:file ? 0.8 : 0.55, detail:`Saving ${fileName}...` });
     const { data, error } = await supabaseClient
       .from('classroom_resources')
       .upsert(row, { onConflict:'id' })
       .select('*')
       .single();
     if(error) throw error;
-    const saved = resourceFromRow(data);
+    let saved = resourceFromRow(data);
+    reportProgress({ stage:'saved', fraction:0.9, detail:`Saved ${fileName}` });
     if(file && classroomResourceCanGeneratePreview(saved)){
       try{
-        return await requestClassroomResourcePreview(saved);
+        reportProgress({ stage:'preview', fraction:0.94, detail:`Preparing preview for ${fileName}...` });
+        saved = await requestClassroomResourcePreview(saved);
       }catch(err){
         console.warn('Could not generate classroom resource preview:', err);
       }
     }
+    reportProgress({ stage:'complete', fraction:1, detail:`Finished ${fileName}` });
     return saved;
   }
 
@@ -1103,6 +1294,14 @@
     restoreClassroom,
     saveTrackerSettings,
     saveVassData,
+    loadVassRankingConfig,
+    saveVassRankingConfig,
+    subscribeVassRankingConfig,
+    unsubscribeVassRankingConfig,
+    syncVassRankingEntries,
+    loadVassRankingEntries,
+    subscribeVassRankingEntries,
+    unsubscribeVassRankingEntries,
     deleteExpiredArchivedClassrooms,
     joinClassByCode,
     createAnnouncement,
