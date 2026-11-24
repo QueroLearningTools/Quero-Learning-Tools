@@ -449,10 +449,43 @@ function positionExtractorMultiMenu(id){
   if(!wrap||!menu)return;
   wrap.classList.remove('open-up');
   const rect=wrap.getBoundingClientRect();
-  const below=window.innerHeight-rect.bottom;
-  const above=rect.top;
-  const menuHeight=Math.min(menu.scrollHeight||190,190);
-  if(below<menuHeight+8&&above>below)wrap.classList.add('open-up');
+  const workArea=document.getElementById('view-extractor');
+  const workRect=workArea?.getBoundingClientRect()||{left:0,right:window.innerWidth};
+  const leftBoundary=Math.max(8,workRect.left+8);
+  const rightBoundary=Math.min(window.innerWidth-8,workRect.right-8);
+  const availableWidth=Math.max(160,rightBoundary-leftBoundary);
+
+  menu.style.removeProperty('position');
+  menu.style.removeProperty('left');
+  menu.style.removeProperty('right');
+  menu.style.removeProperty('top');
+  menu.style.removeProperty('bottom');
+  menu.style.removeProperty('width');
+  menu.style.removeProperty('min-width');
+  menu.style.removeProperty('max-width');
+  menu.style.removeProperty('max-height');
+  menu.style.removeProperty('margin-bottom');
+
+  const desiredWidth=Math.min(availableWidth,Math.max(rect.width,menu.scrollWidth||rect.width));
+  const left=Math.min(Math.max(rect.left,leftBoundary),rightBoundary-desiredWidth);
+  const below=Math.max(0,window.innerHeight-rect.bottom-8);
+  const above=Math.max(0,rect.top-8);
+  const preferredHeight=Math.min(menu.scrollHeight||190,190);
+  const openAbove=below<preferredHeight&&above>below;
+  const maxHeight=Math.min(190,Math.max(72,openAbove?above:below));
+  const renderedHeight=Math.min(menu.scrollHeight||preferredHeight,maxHeight);
+  const top=openAbove?Math.max(8,rect.top-renderedHeight-2):Math.min(window.innerHeight-renderedHeight-8,rect.bottom+2);
+
+  menu.style.position='fixed';
+  menu.style.left=`${left}px`;
+  menu.style.right='auto';
+  menu.style.top=`${top}px`;
+  menu.style.bottom='auto';
+  menu.style.width=`${desiredWidth}px`;
+  menu.style.minWidth=`${Math.min(rect.width,desiredWidth)}px`;
+  menu.style.maxWidth=`${availableWidth}px`;
+  menu.style.maxHeight=`${maxHeight}px`;
+  menu.style.marginBottom='0';
 }
 function toggleExtractorMultiMenu(event,id){
   event?.stopPropagation?.();
@@ -462,6 +495,12 @@ function toggleExtractorMultiMenu(event,id){
   wrap.classList.toggle('open');
   if(wrap.classList.contains('open'))positionExtractorMultiMenu(id);
 }
+function repositionOpenExtractorMenus(event){
+  if(event?.target?.closest?.('.extractor-multiselect .multi-select-menu'))return;
+  document.querySelectorAll('.extractor-multiselect.open').forEach(wrap=>positionExtractorMultiMenu(wrap.id.replace(/-wrap$/,'')));
+}
+window.addEventListener('resize',repositionOpenExtractorMenus);
+document.addEventListener('scroll',repositionOpenExtractorMenus,true);
 function extractorGlobalMeta(){
   const value=id=>document.getElementById(id)?.value||'';
   const year=Number(value('extractor-global-year'))||new Date().getFullYear();
@@ -599,48 +638,50 @@ function clearExtractor(){
   extractorCandidates=[];renderExtractorPreview();
 }
 function escJs(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' ');}
-function normalizeLearningAreaName(value){return String(value||'Mathematics').replace(/\s+/g,' ').trim()||'Mathematics';}
+function normalizeLearningAreaName(value){return String(value||'').replace(/\s+/g,' ').trim();}
 function hiddenLearningAreaSet(){return new Set((deletedLearningAreas||[]).map(normalizeLearningAreaName).filter(Boolean));}
 function normalizeLearningAreaSubjects(value){
   const result={},hidden=hiddenLearningAreaSet();
-  Object.entries(DEFAULT_LEARNING_AREA_SUBJECTS).forEach(([area,subjects])=>{const key=normalizeLearningAreaName(area);if(!hidden.has(key))result[key]=subjects.map(normalizeSubjectName).filter(Boolean);});
-  if(value&&typeof value==='object')Object.entries(value).forEach(([area,subjects])=>{const key=normalizeLearningAreaName(area);if(!hidden.has(key))setLearningAreaSubjectList(key,subjects,result);});
+  const saved=value&&typeof value==='object'?Object.entries(value):[];
+  if(saved.length)saved.forEach(([area,subjects])=>{const key=normalizeLearningAreaName(area);if(!hidden.has(key))setLearningAreaSubjectList(key,subjects,result);});
   return result;
 }
 function ensureLearningAreaSubjectRecord(area){
   const key=normalizeLearningAreaName(area);
+  if(!key)return [];
   if(!learningAreaSubjects||typeof learningAreaSubjects!=='object')learningAreaSubjects={};
   if(!Array.isArray(learningAreaSubjects[key])){
-    const defaults=DEFAULT_LEARNING_AREA_SUBJECTS[key]||[];
     const linked=[];
-    CURRICULUM_SKILL_LINKS.forEach(link=>{if(normalizeLearningAreaName(link.learningArea||'Mathematics')===key)(link.subjects||[]).forEach(subject=>linked.push(subject));});
-    learningAreaSubjects[key]=[...new Set([...defaults,...linked].map(normalizeSubjectName).filter(Boolean))];
+    CURRICULUM_SKILL_LINKS.forEach(link=>{if(normalizeLearningAreaName(link.learningArea)===key)(link.subjects||[]).forEach(subject=>linked.push(subject));});
+    learningAreaSubjects[key]=[...new Set(linked.map(normalizeSubjectName).filter(Boolean))];
   }
   return learningAreaSubjects[key];
 }
 function setLearningAreaSubjectList(area,subjects,target=learningAreaSubjects){
   const key=normalizeLearningAreaName(area);
+  if(!key)return [];
   target[key]=[...new Set((Array.isArray(subjects)?subjects:[]).map(normalizeSubjectName).filter(Boolean))];
   return target[key];
 }
 function normalizeLearningAreaYearLevels(value){
-  const result={Mathematics:[...YEAR_LEVEL_OPTIONS]};
+  const result={};
   if(value&&typeof value==='object')Object.entries(value).forEach(([area,years])=>{setLearningAreaYearLevelList(area,years,result);});
   return result;
 }
 function ensureLearningAreaYearLevelRecord(area){
   const key=normalizeLearningAreaName(area);
+  if(!key)return [];
   if(!learningAreaYearLevels||typeof learningAreaYearLevels!=='object')learningAreaYearLevels={};
   if(!Array.isArray(learningAreaYearLevels[key])){
-    const source=key==='Mathematics'?YEAR_LEVEL_OPTIONS:ensureLearningAreaYearLevelRecord('Mathematics');
     const linked=[];
-    CURRICULUM_SKILL_LINKS.forEach(link=>{if(normalizeLearningAreaName(link.learningArea||'Mathematics')===key)(link.yearLevels||[]).forEach(year=>linked.push(year));});
-    learningAreaYearLevels[key]=[...new Set([...source,...linked].map(normalizeYearLevelName).filter(Boolean))];
+    CURRICULUM_SKILL_LINKS.forEach(link=>{if(normalizeLearningAreaName(link.learningArea)===key)(link.yearLevels||[]).forEach(year=>linked.push(year));});
+    learningAreaYearLevels[key]=[...new Set(linked.map(normalizeYearLevelName).filter(Boolean))];
   }
   return learningAreaYearLevels[key];
 }
 function setLearningAreaYearLevelList(area,years,target=learningAreaYearLevels){
   const key=normalizeLearningAreaName(area);
+  if(!key)return [];
   target[key]=[...new Set((Array.isArray(years)?years:[]).map(normalizeYearLevelName).filter(Boolean))];
   return target[key];
 }
@@ -658,16 +699,16 @@ function yearRowsFromLearningAreas(withArea=true){
 }
 function curriculumLearningAreas(){
   const hidden=hiddenLearningAreaSet();
-  const values=[...new Set([...customLearningAreas,...Object.keys(learningAreaSubjects||{}),...CURRICULUM_SKILL_LINKS.map(l=>normalizeLearningAreaName(l.learningArea||'Mathematics'))].map(normalizeLearningAreaName).filter(area=>area&&!hidden.has(area)))];
+  const values=[...new Set((Array.isArray(customLearningAreas)?customLearningAreas:[]).map(normalizeLearningAreaName).filter(area=>area&&!hidden.has(area)))];
   const order=new Map(customLearningAreas.map((area,index)=>[normalizeLearningAreaName(area),index]));
   return values.sort((a,b)=>(order.has(a)?order.get(a):9999)-(order.has(b)?order.get(b):9999)||a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
 }
 function activeCurriculumLearningArea(){
-  const current=normalizeLearningAreaName(curriculumManagerState.learningArea||'Mathematics');
+  const current=normalizeLearningAreaName(curriculumManagerState.learningArea);
   const areas=curriculumLearningAreas();
-  return areas.includes(current)?current:(areas[0]||'Mathematics');
+  return areas.includes(current)?current:(areas[0]||'');
 }
 function curriculumLinksForArea(area=activeCurriculumLearningArea()){
   const active=normalizeLearningAreaName(area);
-  return CURRICULUM_SKILL_LINKS.filter(l=>normalizeLearningAreaName(l.learningArea||'Mathematics')===active);
+  return CURRICULUM_SKILL_LINKS.filter(l=>normalizeLearningAreaName(l.learningArea)===active);
 }

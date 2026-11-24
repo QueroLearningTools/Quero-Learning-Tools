@@ -5,43 +5,119 @@
 
 window.MathJax=window.MathJax||{startup:{typeset:false},svg:{fontCache:'none'}};
 function mkP(text,center,bold,sz){const align=center?"text-align:center;":"";const weight=bold?"font-weight:bold;":"";return `<p style="${align}font-family:'Times New Roman',serif;font-size:${sz}px;${weight}">${text}</p>`;}
-const DEFAULT_INSTR_HTML={
+const LEGACY_DEFAULT_INSTR_HTML={
   mc:[mkP('Instructions for Section A',true,true,14),mkP('Answer all questions in pencil on your Multiple-Choice Answer Sheet.',false,false,12),mkP('Choose the response that is correct for the question.',false,false,12),mkP('A correct answer scores 1; an incorrect answer scores 0.',false,false,12),mkP('Marks will not be deducted for incorrect answers.',false,false,12),mkP('No marks will be given if more than one answer is completed for any question.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are not drawn to scale.',false,false,12)].join(''),
   tf:[mkP('Instructions for Section B',true,true,14),mkP('For each statement, select True or False.',false,false,12),mkP('A correct answer scores 1; an incorrect answer scores 0.',false,false,12),mkP('Marks will not be deducted for incorrect answers.',false,false,12)].join(''),
   sa:[mkP('Instructions for Section C',true,true,14),mkP('Answer all questions in the spaces provided.',false,false,12),mkP('Write your responses in English.',false,false,12),mkP('In all questions where a numerical answer is required, you should only round your answer when instructed to do so.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are not drawn to scale.',false,false,12)].join(''),
   er:[mkP('Instructions for Section D',true,true,14),mkP('Answer all questions in the spaces provided.',false,false,12),mkP('Write your responses in English.',false,false,12),mkP('In all questions where a numerical answer is required, you should only round your answer when instructed to do so.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are not drawn to scale.',false,false,12)].join(''),
 };
+const DEFAULT_INSTR_HTML={
+  mc:[mkP('Instructions for Section A',true,true,14),mkP('Answer <strong>all</strong> questions in pencil on your Multiple-Choice Answer Sheet.',false,false,12),mkP('Choose the response that is <strong>correct</strong> for the question.',false,false,12),mkP('A correct answer scores 1; an incorrect answer scores 0.',false,false,12),mkP('Marks will <strong>not</strong> be deducted for incorrect answers.',false,false,12),mkP('No marks will be given if more than one answer is completed for any question.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are <strong>not</strong> drawn to scale.',false,false,12)].join(''),
+  tf:[mkP('Instructions for Section B',true,true,14),mkP('For each statement, select True or False.',false,false,12),mkP('A correct answer scores 1; an incorrect answer scores 0.',false,false,12),mkP('Marks will <strong>not</strong> be deducted for incorrect answers.',false,false,12)].join(''),
+  sa:[mkP('Instructions for Section C',true,true,14),mkP('Answer <strong>all</strong> questions in the spaces provided.',false,false,12),mkP('Write your responses in English.',false,false,12),mkP('In all questions where a numerical answer is required, you should only round your answer when instructed to do so.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are <strong>not</strong> drawn to scale.',false,false,12)].join(''),
+  er:[mkP('Instructions for Section D',true,true,14),mkP('Answer <strong>all</strong> questions in the spaces provided.',false,false,12),mkP('Write your responses in English.',false,false,12),mkP('In all questions where a numerical answer is required, you should only round your answer when instructed to do so.',false,false,12),mkP('Unless otherwise indicated, the diagrams in this book are <strong>not</strong> drawn to scale.',false,false,12)].join(''),
+};
+function upgradeDefaultInstructionHtml(value={}){const upgraded={...value};Object.keys(DEFAULT_INSTR_HTML).forEach(key=>{if(!upgraded[key]||upgraded[key]===LEGACY_DEFAULT_INSTR_HTML[key])upgraded[key]=DEFAULT_INSTR_HTML[key];});return upgraded;}
 let instrHTML={mc:DEFAULT_INSTR_HTML.mc,tf:DEFAULT_INSTR_HTML.tf,sa:DEFAULT_INSTR_HTML.sa,er:DEFAULT_INSTR_HTML.er};
+const EXAM_TEXT_DEFAULTS_STORAGE_KEY='quero_exam_text_defaults_v1';
+const EXAM_TEXT_ACTIVE_DRAFT_STORAGE_KEY='quero_exam_text_active_draft_v1';
+const EXAM_SECTION_MARK_LIMITS_STORAGE_KEY='quero_exam_section_mark_limits_v1';
+const EXAM_BUILDER_SETTINGS_ID='global';
+const TEACHER_EXAM_SECTION_MARK_LIMITS=Object.freeze({mc:40,tf:40,sa:100,er:100});
+const EXAM_INSTRUCTION_HTML_STORAGE_KEY='quero_exam_instruction_html_v2';
+const EXAM_DRAFT_DB_NAME='quero_exam_drafts_v1';
+const EXAM_DRAFT_DB_STORE='section_instructions';
+function openExamDraftDb(){
+  return new Promise((resolve,reject)=>{
+    if(!window.indexedDB){reject(new Error('IndexedDB is unavailable'));return;}
+    const request=indexedDB.open(EXAM_DRAFT_DB_NAME,1);
+    request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(EXAM_DRAFT_DB_STORE))db.createObjectStore(EXAM_DRAFT_DB_STORE,{keyPath:'key'});};
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error('Could not open exam draft storage'));
+  });
+}
+async function writeExamInstructionsToDb(key,html){
+  const db=await openExamDraftDb();
+  try{
+    await new Promise((resolve,reject)=>{const tx=db.transaction(EXAM_DRAFT_DB_STORE,'readwrite');tx.objectStore(EXAM_DRAFT_DB_STORE).put({key,instrHTML:{...html},savedAt:new Date().toISOString()});tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Instruction save was aborted'));});
+    return true;
+  }finally{db.close();}
+}
+async function readExamInstructionsFromDb(key){
+  const db=await openExamDraftDb();
+  try{return await new Promise((resolve,reject)=>{const tx=db.transaction(EXAM_DRAFT_DB_STORE,'readonly'),request=tx.objectStore(EXAM_DRAFT_DB_STORE).get(key);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error);});}
+  finally{db.close();}
+}
+function loadStoredExamTextDefaults(){try{const value=JSON.parse(localStorage.getItem(EXAM_TEXT_DEFAULTS_STORAGE_KEY)||'{}');if(!value||typeof value!=='object')return{};Object.values(value).forEach(saved=>{if(saved?.instrHTML)saved.instrHTML=upgradeDefaultInstructionHtml(saved.instrHTML);});return value;}catch(e){console.warn('Could not load exam text defaults',e);return{};}}
+function persistExamTextDefaults(){try{localStorage.setItem(EXAM_TEXT_DEFAULTS_STORAGE_KEY,JSON.stringify(examTextDefaults));return true;}catch(e){console.warn('Could not save exam text defaults',e);return false;}}
+function loadActiveExamTextDraft(){try{const value=JSON.parse(localStorage.getItem(EXAM_TEXT_ACTIVE_DRAFT_STORAGE_KEY)||'null');if(!value||typeof value!=='object')return null;if(value.instrHTML)value.instrHTML=upgradeDefaultInstructionHtml(value.instrHTML);return value;}catch(e){console.warn('Could not load active exam text draft',e);return null;}}
+function persistActiveExamTextDraft(details){try{localStorage.setItem(EXAM_TEXT_ACTIVE_DRAFT_STORAGE_KEY,JSON.stringify({details:{subject:details.subject||'',examination:details.examination||'Examination'},coverPage:{...coverPage},instrHTML:{...instrHTML},savedAt:new Date().toISOString()}));return true;}catch(e){console.warn('Could not save active exam text draft',e);return false;}}
+function loadStoredExamInstructions(){try{const value=JSON.parse(localStorage.getItem(EXAM_INSTRUCTION_HTML_STORAGE_KEY)||'{}');if(!value||typeof value!=='object')return{};Object.values(value).forEach(saved=>{if(saved?.instrHTML)saved.instrHTML=upgradeDefaultInstructionHtml(saved.instrHTML);});return value;}catch(e){console.warn('Could not load exam instructions',e);return{};}}
+function persistCurrentExamInstructions(details=getExamDetails()){
+  const key=examTextDefaultsKey(details),snapshot={...instrHTML};
+  if(!key.startsWith('|'))writeExamInstructionsToDb(key,snapshot).catch(e=>console.warn('Could not save exam instructions to IndexedDB',e));
+  try{
+    if(key.startsWith('|'))return false;
+    const saved=loadStoredExamInstructions();
+    saved[key]={instrHTML:snapshot,savedAt:new Date().toISOString()};
+    localStorage.setItem(EXAM_INSTRUCTION_HTML_STORAGE_KEY,JSON.stringify(saved));
+    return true;
+  }catch(e){console.warn('Could not save exam instructions',e);return false;}
+}
+function applyStoredExamInstructions(details=getExamDetails()){
+  const saved=loadStoredExamInstructions()[examTextDefaultsKey(details)];
+  if(!saved?.instrHTML)return false;
+  instrHTML={...instrHTML,...saved.instrHTML};
+  return true;
+}
+async function restoreExamInstructionsFromDb(){
+  try{
+    const key=examTextDefaultsKey(getExamDetails());
+    if(key.startsWith('|'))return false;
+    const saved=await readExamInstructionsFromDb(key);
+    if(!saved?.instrHTML)return false;
+    instrHTML={...instrHTML,...upgradeDefaultInstructionHtml(saved.instrHTML)};
+    examTextDefaults[key]={coverPage:{...coverPage},instrHTML:{...instrHTML}};
+    if(typeof renderExam==='function')renderExam();
+    return true;
+  }catch(e){console.warn('Could not restore exam instructions from IndexedDB',e);return false;}
+}
+let examTextDefaults=loadStoredExamTextDefaults();
+const STANDARD_COVER_PAGE_PRESET={
+  approvedMaterials:"One bound reference that may be annotated\nOne approved CAS calculator or CAS software, and one scientific calculator",
+  materialsSupplied:"Question and Answer Book of xx pages\nFormula Sheet\nMultiple-Choice Answer Sheet",
+  instructions:"Follow the instructions on your Multiple-Choice Answer Sheet.\nYou may keep this Multiple-Choice Question Book.\nStudents are not permitted to bring mobile phones and/or any unauthorised electronic devices into the examination room.",
+  approvedMaterialsHtml:"<ul><li>One bound reference that may be annotated</li><li>One approved CAS calculator or CAS software, and one scientific calculator</li></ul>",
+  materialsSuppliedHtml:"<ul><li>Question and Answer Book of xx pages</li><li>Formula Sheet</li><li>Multiple-Choice Answer Sheet</li></ul>",
+  instructionsHtml:"<ul><li>Follow the instructions on your Multiple-Choice Answer Sheet.</li><li>You may keep this Multiple-Choice Question Book.</li></ul><p>Students are <strong>not</strong> permitted to bring mobile phones and/or any unauthorised electronic devices into the examination room.</p>"
+};
 const COVER_PAGE_DEFAULTS={
   "Foundation Mathematics|Examination":{
-    approvedMaterials:"",
-    materialsSupplied:"",
-    instructions:"",
-    approvedMaterialsHtml:"",
-    materialsSuppliedHtml:"",
-    instructionsHtml:""
+    ...STANDARD_COVER_PAGE_PRESET
   },
   "General Mathematics|Examination 1":{
-    approvedMaterials:"",
-    materialsSupplied:"",
-    instructions:"",
-    approvedMaterialsHtml:"",
-    materialsSuppliedHtml:"",
-    instructionsHtml:""
+    ...STANDARD_COVER_PAGE_PRESET
   }
 };function coverDefaultsForDetails(details={}){const subject=details.subject||"Foundation Mathematics",exam=details.examination||"Examination";return COVER_PAGE_DEFAULTS[`${subject}|${exam}`]||COVER_PAGE_DEFAULTS["Foundation Mathematics|Examination"];}
+function coverPageHasContent(cp={}){return ['approvedMaterialsHtml','materialsSuppliedHtml','instructionsHtml','approvedMaterials','materialsSupplied','instructions'].some(key=>String(cp[key]||'').trim());}
 function coverPageLooksLikeOldDefault(cp={}){const joined=['approvedMaterialsHtml','materialsSuppliedHtml','instructionsHtml','approvedMaterials','materialsSupplied','instructions'].map(k=>String(cp[k]||'')).join(' ').toLowerCase();return joined.includes('multiple-choice answer sheet')||joined.includes('one bound reference that may be annotated')||joined.includes('one approved cas calculator')||joined.includes('students are <b>not</b> permitted')||joined.includes('students are not permitted to bring mobile phones');}
 function coverPageMatchesPreset(){const current=['approvedMaterialsHtml','materialsSuppliedHtml','instructionsHtml'].map(k=>String(coverPage[k]||'').trim()).join('|');if(!current.replace(/\|/g,''))return true;return Object.values(COVER_PAGE_DEFAULTS).some(preset=>['approvedMaterialsHtml','materialsSuppliedHtml','instructionsHtml'].map(k=>String(preset[k]||'').trim()).join('|')===current);}
-function applyCoverDefaultsForCurrentExam(force=false){const preset=coverDefaultsForDetails(getExamDetails());if(!force&&!coverPageMatchesPreset())return;coverPage={...preset};const ids={approvedMaterialsHtml:'cover-approved-materials',materialsSuppliedHtml:'cover-materials-supplied',instructionsHtml:'cover-instructions'};Object.entries(ids).forEach(([key,id])=>{const el=document.getElementById(id);if(el)el.innerHTML=coverPage[key]||'';});}
+function examTextDefaultsKey(details={}){return `${String(details.subject||'').trim()}|${String(details.examination||'Examination').trim()}`;}
+function rememberCurrentExamTextDefaults(){const details=getExamDetails(),key=examTextDefaultsKey(details);if(key.startsWith('|'))return false;examTextDefaults[key]={coverPage:{...coverPage},instrHTML:{...instrHTML}};const defaultsSaved=persistExamTextDefaults(),draftSaved=persistActiveExamTextDraft(details),instructionsSaved=persistCurrentExamInstructions(details);return defaultsSaved&&draftSaved&&instructionsSaved;}
+function applyExamTextDefaultsForCurrentExam(){const saved=examTextDefaults[examTextDefaultsKey(getExamDetails())];if(!saved)return applyStoredExamInstructions();if(saved.coverPage)coverPage=coverPageHasContent(saved.coverPage)?{...coverPage,...saved.coverPage}:{...coverDefaultsForDetails(getExamDetails())};if(saved.instrHTML)instrHTML={...instrHTML,...saved.instrHTML};applyStoredExamInstructions();return true;}
+function applyActiveExamTextDraft(){const draft=loadActiveExamTextDraft();if(!draft)return false;const details=draft.details||{};if(details.subject||details.examination)applyExamDetails({...getExamDetails(),...details});if(draft.coverPage)coverPage={...coverPage,...draft.coverPage};if(draft.instrHTML)instrHTML={...instrHTML,...draft.instrHTML};return true;}
+function updateCoverDefaultEditors(){const ids={approvedMaterialsHtml:'cover-approved-materials',materialsSuppliedHtml:'cover-materials-supplied',instructionsHtml:'cover-instructions'};Object.entries(ids).forEach(([key,id])=>{const el=document.getElementById(id);if(el)el.innerHTML=coverPage[key]||'';});}
+function applyCoverDefaultsForCurrentExam(force=false){if(!force&&applyExamTextDefaultsForCurrentExam()){updateCoverDefaultEditors();return;}const preset=coverDefaultsForDetails(getExamDetails());if(!force&&!coverPageMatchesPreset())return;coverPage={...preset};instrHTML={...DEFAULT_INSTR_HTML};updateCoverDefaultEditors();}
 const DEFAULT_COVER_PAGE=coverDefaultsForDetails();
 const DEFAULT_COVER_PAGE_HTML=DEFAULT_COVER_PAGE;
 let coverPage={...DEFAULT_COVER_PAGE};
 let examSchoolName='Quero Learning Tools',coverPageLogoData='',coverPageLogoName='',coverPageFooterData='',coverPageFooterName='';
 let coverPageExpanded=false;
 let questions=[],deletedQuestions=[],extractorCandidates=[],nextId=1,examQuestions=[],savedPapers=[],editingId=null;
+let examBuilderMode='edit',examPageBreaks=[],examPageZoom=1,examSectionMarkLimits=loadStoredExamSectionMarkLimits(),examSectionMarkLimitsLoadedFromCloud=false,examSectionMarkLimitsSaveTimer=null,examBuilderSettingsChannel=null;
 const collapsedQuestionCards=new Set();
-let activeBankFilter='private',activeAddQBankFilter='private',customBanks=[];
-let curriculumManagerState={learningArea:'Mathematics',topic:'',subtopic:'',skill:'',subject:'',yearLevel:'',author:''},curriculumDeletedIds=[],youtubeLinks=[],youtubeLinkDeletedIds=[],customSubjects=[],customYearLevels=[],customAuthors=[],deletedAuthors=[],customLearningAreas=['Mathematics'],deletedLearningAreas=['Science'],learningAreaSubjects={},learningAreaYearLevels={};
+let activeBankFilter='private',activeAddQBankFilter='private',customBanks=[],questionBankAvailability={};
+let curriculumManagerState={learningArea:'',topic:'',subtopic:'',skill:'',subject:'',yearLevel:'',author:''},curriculumDeletedIds=[],youtubeLinks=[],youtubeLinkDeletedIds=[],customSubjects=[],customYearLevels=[],customAuthors=[],deletedAuthors=[],customLearningAreas=[],deletedLearningAreas=[],learningAreaSubjects={},learningAreaYearLevels={};
 const PRIVATE_SCHOOL_ID='quero-learning-tools';
 const DEFAULT_SCHOOLS=[
   {id:PRIVATE_SCHOOL_ID,name:'Quero Learning Tools',emailDomain:'',studentJoinCode:'QUERO-STUDENT',teacherJoinCode:'QUERO-TEACHER',teacherRequiresApproval:false,active:true,createdAt:new Date().toISOString()},
@@ -52,6 +128,62 @@ let currentRole='admin';
 let activeEditorId='f-text';
 const expandedSectionInstructions=new Set();
 const STORAGE_KEY='brainforge_exam_builder_state_v1';
+const CURRICULUM_CACHE_KEY='quero_curriculum_map_cache_v1';
+const CURRICULUM_CACHE_RESET_KEY='quero_curriculum_cache_reset_20261024_1';
+function resetCurriculumLocalCacheOnce(){
+  try{
+    if(localStorage.getItem(CURRICULUM_CACHE_RESET_KEY)==='done')return false;
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const state=JSON.parse(raw);
+      ['curriculumLinks','youtubeLinks','customSubjects','customYearLevels','customAuthors','deletedAuthors','customLearningAreas','learningAreaSubjects','learningAreaYearLevels','curriculumManagerState'].forEach(key=>delete state[key]);
+      localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    }
+    localStorage.setItem(CURRICULUM_CACHE_RESET_KEY,'done');
+    return true;
+  }catch(e){console.warn('Could not reset the Curriculum Manager cache:',e);return false;}
+}
+function saveCurriculumCache(){
+  try{
+    localStorage.setItem(CURRICULUM_CACHE_KEY,JSON.stringify({
+      curriculumLinks:CURRICULUM_SKILL_LINKS,
+      youtubeLinks,
+      customSubjects,
+      customYearLevels,
+      customAuthors,
+      deletedAuthors,
+      customLearningAreas,
+      deletedLearningAreas,
+      learningAreaSubjects,
+      learningAreaYearLevels,
+      curriculumManagerState
+    }));
+    return true;
+  }catch(e){console.warn('Could not save the Curriculum Manager cache:',e);return false;}
+}
+function loadCurriculumCache(){
+  try{
+    const raw=localStorage.getItem(CURRICULUM_CACHE_KEY);
+    if(!raw)return false;
+    const state=JSON.parse(raw),hidden=new Set((Array.isArray(state.deletedLearningAreas)?state.deletedLearningAreas:[]).map(normalizeLearningAreaName).filter(Boolean));
+    deletedLearningAreas=[...hidden];
+    customLearningAreas=Array.isArray(state.customLearningAreas)?[...new Set(state.customLearningAreas.map(normalizeLearningAreaName).filter(area=>area&&!hidden.has(area)))]:[];
+    const allowed=new Set(customLearningAreas);
+    learningAreaSubjects=normalizeLearningAreaSubjects(state.learningAreaSubjects);
+    learningAreaYearLevels=normalizeLearningAreaYearLevels(state.learningAreaYearLevels);
+    Object.keys(learningAreaSubjects).forEach(area=>{if(!allowed.has(normalizeLearningAreaName(area)))delete learningAreaSubjects[area];});
+    Object.keys(learningAreaYearLevels).forEach(area=>{if(!allowed.has(normalizeLearningAreaName(area)))delete learningAreaYearLevels[area];});
+    customSubjects=Array.isArray(state.customSubjects)?[...new Set(state.customSubjects.map(normalizeSubjectName).filter(Boolean))]:[];
+    customYearLevels=Array.isArray(state.customYearLevels)?[...new Set(state.customYearLevels.map(normalizeYearLevelName).filter(Boolean))]:[];
+    customAuthors=Array.isArray(state.customAuthors)?[...new Set(state.customAuthors.map(normalizeAuthorName).filter(Boolean))]:[];
+    deletedAuthors=Array.isArray(state.deletedAuthors)?[...new Set(state.deletedAuthors.map(normalizeAuthorName).filter(Boolean))]:[];
+    if(state.curriculumManagerState)curriculumManagerState={...curriculumManagerState,...state.curriculumManagerState,learningArea:normalizeLearningAreaName(state.curriculumManagerState.learningArea)};
+    const links=Array.isArray(state.curriculumLinks)?state.curriculumLinks.filter(link=>allowed.has(normalizeLearningAreaName(link.learningArea||link.learning_area))):[];
+    setRuntimeCurriculumLinks(links,{silent:true});
+    youtubeLinks=Array.isArray(state.youtubeLinks)?state.youtubeLinks.map(normalizeYoutubeLink).filter(link=>link.title&&link.url&&allowed.has(normalizeLearningAreaName(link.learningArea))):[];
+    return true;
+  }catch(e){console.warn('Could not load the Curriculum Manager cache:',e);return false;}
+}
 // Supabase constants and client are defined in supabase-client.js.
 let currentUser=null,currentProfile=null,currentProfileRole=null,adminUsers=[];
 const PROFILE_CACHE_KEY='quero_cached_profile_v1';
@@ -64,6 +196,13 @@ function cachedProfileForCurrentUser(){
   if(currentUser?.id&&cached.id&&cached.id!==currentUser.id)return null;
   if(currentUser?.email&&cached.email&&String(cached.email).toLowerCase()!==String(currentUser.email).toLowerCase())return null;
   return cached;
+}
+function sessionHasCachedProfileRole(session){
+  const user=session?.user,cached=cachedProfile();
+  if(!user||!cached?.role)return false;
+  if(user.id&&cached.id&&cached.id!==user.id)return false;
+  if(user.email&&cached.email&&String(cached.email).toLowerCase()!==String(user.email).toLowerCase())return false;
+  return true;
 }
 function saveProfileCache(profile={}){
   const payload={
@@ -165,9 +304,11 @@ async function applyProfileRole(){
   updateSignedInLabel();
   setRoleTabVisibility(true);
 }
-function setAuthUi(session){
+function setAuthUi(session,options={}){
   currentUser=session?.user||null;
-  if(!currentUser){currentProfileRole=null;currentProfile=null;clearProfileCache();}
+  const resolving=Boolean(currentUser&&options?.resolving);
+  const showLoading=resolving&&options?.showLoading!==false;
+  if(!currentUser){currentProfileRole=null;currentProfile=null;resetSignInInitialization();clearProfileCache();}
   else{
     const cached=cachedProfileForCurrentUser();
     let appliedCachedRole=false;
@@ -178,10 +319,11 @@ function setAuthUi(session){
     }
     if(appliedCachedRole&&typeof showView==='function')setTimeout(()=>showView('home'),0);
   }
-  const login=document.getElementById('login-screen'),app=document.getElementById('app'),email=document.getElementById('user-email'),strip=document.getElementById('user-strip');
-  if(login)login.style.display=currentUser?'none':'flex';
-  if(app)app.style.display=currentUser?'flex':'none';
-  if(strip)strip.style.display=currentUser?'block':'none';
+  const loading=document.getElementById('auth-loading-screen'),login=document.getElementById('login-screen'),app=document.getElementById('app'),email=document.getElementById('user-email'),strip=document.getElementById('user-strip');
+  if(loading)loading.style.display=showLoading?'flex':'none';
+  if(login)login.style.display=resolving?'none':(currentUser?'none':'flex');
+  if(app)app.style.display=currentUser&&!resolving?'flex':'none';
+  if(strip)strip.style.display=currentUser&&!resolving?'block':'none';
   if(email)email.textContent=currentUser?.email||'';
   if(!currentUser)setRoleTabVisibility(false);
   if(typeof renderGlobalTopbar==='function')renderGlobalTopbar();
@@ -249,17 +391,82 @@ function showStudentHomeAfterAuth(){
     setTimeout(()=>showView('home'),0);
   }
 }
+function isStudentQuestionLazyLoadRole(){return currentRole==='student'||currentRole==='s_student';}
+function prepareStudentQuestionLazyLoad(){if(isStudentQuestionLazyLoadRole())questions=[];}
+async function loadQuestionsForSignedInRole(){
+  if(isStudentQuestionLazyLoadRole()){
+    questions=[];
+    return true;
+  }
+  return loadQuestionsFromSupabase();
+}
+let signInInitializationPromise=null;
+let signInInitializationUserId='';
+let completedSignInInitializationUserId='';
+let signInInitializationGeneration=0;
+let acceptedAuthSessionToken='';
+function acceptAuthSession(session){acceptedAuthSessionToken=String(session?.access_token||'');}
+function clearAcceptedAuthSession(){acceptedAuthSessionToken='';}
+function authSessionIsAccepted(session){
+  const token=String(session?.access_token||'');
+  return Boolean(token&&token===acceptedAuthSessionToken);
+}
+function resetSignInInitialization(){
+  signInInitializationGeneration+=1;
+  signInInitializationPromise=null;
+  signInInitializationUserId='';
+  completedSignInInitializationUserId='';
+}
+function signInInitializationIsCurrent(userId,generation,session){
+  return generation===signInInitializationGeneration&&String(currentUser?.id||'')===userId&&authSessionIsAccepted(session);
+}
+async function initializeSignedInSession(session){
+  const userId=String(session?.user?.id||'');
+  if(!userId||!authSessionIsAccepted(session))return false;
+  if(completedSignInInitializationUserId===userId)return true;
+  if(signInInitializationPromise&&signInInitializationUserId===userId)return signInInitializationPromise;
+  signInInitializationUserId=userId;
+  const generation=signInInitializationGeneration;
+  const initialization=(async()=>{
+    setAuthUi(session,{resolving:true});
+    await applyProfileRole();
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    setAuthUi(session);
+    prepareStudentQuestionLazyLoad();
+    showStudentHomeAfterAuth();
+    await loadSchoolsFromSupabase();
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    await loadCurriculumFromSupabase();
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    await loadQuestionBanksFromSupabase();
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    await loadQuestionsForSignedInRole();
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    if(typeof loadExamPapersFromSupabase==='function')await loadExamPapersFromSupabase({silent:true});
+    if(!signInInitializationIsCurrent(userId,generation,session))return false;
+    completedSignInInitializationUserId=userId;
+    return true;
+  })();
+  signInInitializationPromise=initialization;
+  try{return await initialization;}
+  finally{
+    if(signInInitializationPromise===initialization){signInInitializationPromise=null;signInInitializationUserId='';}
+  }
+}
 async function initAuth(){
   if(!supabaseClient){setAuthUi(null);return;}
   const recovery=isPasswordRecoveryUrl();
   const {data:{session}}=await supabaseClient.auth.getSession();
-  setAuthUi(session);
-  if(recovery&&session){showResetForm();clearPasswordRecoveryUrl();return;}
-  if(session){await applyProfileRole();showStudentHomeAfterAuth();await loadSchoolsFromSupabase();await loadCurriculumFromSupabase();await loadQuestionsFromSupabase();}
+  if(session)acceptAuthSession(session);else clearAcceptedAuthSession();
+  if(recovery&&session){setAuthUi(session);showResetForm();clearPasswordRecoveryUrl();return;}
+  if(session){setAuthUi(session,{resolving:!sessionHasCachedProfileRole(session),showLoading:false});await applyProfileRole();if(!currentUser||!authSessionIsAccepted(session))return;setAuthUi(session);prepareStudentQuestionLazyLoad();showStudentHomeAfterAuth();await loadSchoolsFromSupabase();await loadCurriculumFromSupabase();await loadQuestionBanksFromSupabase();await loadQuestionsForSignedInRole();if(typeof loadExamPapersFromSupabase==='function')await loadExamPapersFromSupabase({silent:true});}
+  else setAuthUi(null);
   supabaseClient.auth.onAuthStateChange(async(event,session)=>{
-    if(event==='PASSWORD_RECOVERY'||(isPasswordRecoveryUrl()&&session)){setAuthUi(session);showResetForm();clearPasswordRecoveryUrl();return;}
-    setAuthUi(session);
-    if(session){await applyProfileRole();showStudentHomeAfterAuth();await loadSchoolsFromSupabase();await loadCurriculumFromSupabase();await loadQuestionsFromSupabase();}
+    if(event==='INITIAL_SESSION'||event==='TOKEN_REFRESHED'||event==='USER_UPDATED')return;
+    if(event==='PASSWORD_RECOVERY'||(isPasswordRecoveryUrl()&&session)){acceptAuthSession(session);setAuthUi(session);showResetForm();clearPasswordRecoveryUrl();return;}
+    if(!session){clearAcceptedAuthSession();setAuthUi(null);return;}
+    if(!authSessionIsAccepted(session))return;
+    await initializeSignedInSession(session);
   });
 }
 async function registerWithEmail(){
@@ -307,23 +514,27 @@ async function loginWithEmail(){
     const email=await resolveLoginEmail(identifier);
     const {data,error}=await supabaseClient.auth.signInWithPassword({email,password});
     if(error)throw error;
+    acceptAuthSession(data.session);
     if(document.getElementById('login-remember')?.checked)localStorage.setItem('bf-login-identifier',identifier);else localStorage.removeItem('bf-login-identifier');
-    setAuthUi(data.session);
-    await applyProfileRole();
-    await loadSchoolsFromSupabase();
-    await loadCurriculumFromSupabase();
-    await loadQuestionsFromSupabase();
-    showToast('Signed in');
+    if(await initializeSignedInSession(data.session))showToast('Signed in');
   }catch(e){if(err)err.textContent=e.message||'Could not sign in.';}
   finally{if(btn){btn.disabled=false;btn.textContent='Login';}}
 }
 async function logoutUser(){
-  if(supabaseClient)await supabaseClient.auth.signOut();
+  clearAcceptedAuthSession();
+  resetSignInInitialization();
   clearProfileCache();
   setAuthUi(null);
+  showLoginForm();
+  const password=document.getElementById('login-password');
+  if(password)password.value='';
   setAppRole('admin',false);
-  questions=[];examQuestions=[];
-  renderBank();renderExam();renderAddQList();updateStats();
+  questions=[];examQuestions=[];savedPapers=[];
+  renderBank();renderExam();renderPapers();renderAddQList();updateStats();
+  if(supabaseClient){
+    try{await supabaseClient.auth.signOut();}
+    catch(error){console.warn('Remote sign out did not complete:',error);}
+  }
   showToast('Signed out');
 }
 const DIFFICULTY_LEVELS=['Easy','Medium','Hard','Advance','Extension'];
@@ -391,7 +602,7 @@ function adjustDurationField(id,delta,fallback){
   const el=document.getElementById(id);if(!el)return;
   const minutes=Math.max(0,readingTimeMinutes(el.value||fallback)+delta);
   el.value=`${minutes} min${minutes===1?'':'s'}`;
-  saveState();
+  el.dispatchEvent(new Event('input',{bubbles:true}));
 }
 function schoolForExamName(name){
   const selected=String(name||'').trim();
@@ -442,9 +653,68 @@ function applySchoolExamAssetsForExam(save=false){
   if(save)saveState();
   return true;
 }
+function normaliseExamSectionMarkLimits(value){
+  const source=value&&typeof value==='object'?value:{};
+  return ['mc','tf','sa','er'].reduce((result,key)=>{
+    const limit=Math.max(0,Math.floor(Number(source[key])||0));
+    if(limit)result[key]=limit;
+    return result;
+  },{});
+}
+function loadStoredExamSectionMarkLimits(){
+  try{return normaliseExamSectionMarkLimits(JSON.parse(localStorage.getItem(EXAM_SECTION_MARK_LIMITS_STORAGE_KEY)||'{}'));}
+  catch(error){console.warn('Could not load section mark limits',error);return {};}
+}
+function persistExamSectionMarkLimits(){
+  try{localStorage.setItem(EXAM_SECTION_MARK_LIMITS_STORAGE_KEY,JSON.stringify(normaliseExamSectionMarkLimits(examSectionMarkLimits)));return true;}
+  catch(error){console.warn('Could not save section mark limits',error);return false;}
+}
+function subscribeExamBuilderSettings(){
+  if(!supabaseClient||examBuilderSettingsChannel)return;
+  examBuilderSettingsChannel=supabaseClient.channel('exam-builder-settings-global')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'exam_builder_settings',filter:`id=eq.${EXAM_BUILDER_SETTINGS_ID}`},payload=>{
+      examSectionMarkLimits=normaliseExamSectionMarkLimits(payload.new?.section_mark_limits);
+      examSectionMarkLimitsLoadedFromCloud=true;
+      persistExamSectionMarkLimits();
+      if(typeof renderExam==='function'&&document.getElementById('view-builder')?.style.display!=='none')renderExam();
+    })
+    .subscribe();
+}
+async function loadExamSectionMarkLimitsFromSupabase(){
+  if(!supabaseClient||!currentUser?.id)return false;
+  try{
+    const {data,error}=await supabaseClient.from('exam_builder_settings').select('section_mark_limits').eq('id',EXAM_BUILDER_SETTINGS_ID).maybeSingle();
+    if(error)throw error;
+    if(!data)return false;
+    examSectionMarkLimits=normaliseExamSectionMarkLimits(data.section_mark_limits);
+    examSectionMarkLimitsLoadedFromCloud=true;
+    persistExamSectionMarkLimits();
+    subscribeExamBuilderSettings();
+    if(typeof renderExam==='function'&&document.getElementById('view-builder')?.style.display!=='none')renderExam();
+    return true;
+  }catch(error){
+    console.warn('Could not load shared exam section mark limits',error);
+    return false;
+  }
+}
+async function saveExamSectionMarkLimitsToSupabase(){
+  if(!supabaseClient||!currentUser?.id||!isAdminRole())return false;
+  const row={id:EXAM_BUILDER_SETTINGS_ID,section_mark_limits:normaliseExamSectionMarkLimits(examSectionMarkLimits),updated_by:currentUser.id,updated_at:new Date().toISOString()};
+  const {error}=await supabaseClient.from('exam_builder_settings').upsert(row,{onConflict:'id'});
+  if(error)throw error;
+  examSectionMarkLimitsLoadedFromCloud=true;
+  return true;
+}
+function queueExamSectionMarkLimitsSupabaseSave(){
+  clearTimeout(examSectionMarkLimitsSaveTimer);
+  examSectionMarkLimitsSaveTimer=setTimeout(async()=>{
+    try{await saveExamSectionMarkLimitsToSupabase();}
+    catch(error){console.error('Could not save shared exam section mark limits',error);showToast('Maximum Marks saved on this device, but could not sync to Supabase.',true);}
+  },400);
+}
 function getExamDetails(){
   return {
-    subject:(document.getElementById('exam-subject')||{}).value||'Foundation Mathematics',
+    subject:(document.getElementById('exam-subject')||{}).value||'',
     examination:(document.getElementById('exam-number')||{}).value||'Examination',
     date:(document.getElementById('exam-date')||{}).value||'',
     time:(document.getElementById('exam-time')||{}).value||'14:00',
@@ -454,13 +724,14 @@ function getExamDetails(){
     coverLogoData:coverPageLogoData||'',
     coverLogoName:coverPageLogoName||'',
     coverFooterData:coverPageFooterData||'',
-    coverFooterName:coverPageFooterName||''
+    coverFooterName:coverPageFooterName||'',
+    sectionMarkLimits:{...normaliseExamSectionMarkLimits(examSectionMarkLimits)}
   };
 }
 function bfExportExamDetails(overrides={}){
   let current={};
   try{current=getExamDetails();}catch(e){current={};}
-  const defaults={subject:'Foundation Mathematics',examination:'Examination',date:'',time:'14:00',readingTime:'15 mins',writingTime:'90 mins',schoolName:'Quero Learning Tools',coverLogoData:'',coverLogoName:'',coverFooterData:'',coverFooterName:''};
+  const defaults={subject:preferredExamSubjectFromHomeClassrooms(),examination:'Examination',date:'',time:'14:00',readingTime:'15 mins',writingTime:'90 mins',schoolName:'Quero Learning Tools',coverLogoData:'',coverLogoName:'',coverFooterData:'',coverFooterName:''};
   const merged={...defaults,...current,...(overrides||{})};
   merged.coverLogoData=merged.coverLogoData||coverPageLogoData||'';
   merged.coverLogoName=merged.coverLogoName||coverPageLogoName||'';
@@ -490,7 +761,7 @@ async function bfDocxFooterXml(ctx,details={}){
 function examTitleFromDetails(details=getExamDetails()){
   const yearMatch=String(details.date||'').match(/^(\d{4})/);
   const year=yearMatch?yearMatch[1]:String(new Date().getFullYear());
-  const subject=(details.subject||'Foundation Mathematics').trim();
+  const subject=(details.subject||preferredExamSubjectFromHomeClassrooms()||'Untitled Subject').trim();
   const examination=(details.examination||'Examination 1').trim();
   return `${year} ${subject} ${examination}`;
 }
@@ -499,11 +770,14 @@ function updateExamTitleFromMetadata(){
   if(el)el.value=examTitleFromDetails();
 }
 function applyExamDetails(details={}){
-  const defaults={subject:'Foundation Mathematics',examination:'Examination',date:'',time:'14:00',readingTime:'15 mins',writingTime:'90 mins',schoolName:'Quero Learning Tools',coverLogoData:'',coverLogoName:'',coverFooterData:'',coverFooterName:''};
+  const defaults={subject:preferredExamSubjectFromHomeClassrooms(),examination:'Examination',date:'',time:'14:00',readingTime:'15 mins',writingTime:'90 mins',schoolName:'Quero Learning Tools',coverLogoData:'',coverLogoName:'',coverFooterData:'',coverFooterName:''};
   const data={...defaults,...details};
+  const hasStoredLimits=localStorage.getItem(EXAM_SECTION_MARK_LIMITS_STORAGE_KEY)!==null;
+  if(!examSectionMarkLimitsLoadedFromCloud)examSectionMarkLimits=hasStoredLimits?loadStoredExamSectionMarkLimits():normaliseExamSectionMarkLimits(data.sectionMarkLimits);
+  if(!hasStoredLimits&&Object.keys(examSectionMarkLimits).length)persistExamSectionMarkLimits();
   const set=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value;};
   syncExamSubjectOptions(data.subject);
-  set('exam-subject',data.subject);
+  set('exam-subject',data.subject||currentExamSubject());
   set('exam-number',data.examination);
   set('exam-date',data.date);
   set('exam-time',data.time);
@@ -749,22 +1023,28 @@ function activeSchoolNames(){
 function saveState(){
   try{
     cleanupDeletedQuestions();
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({questions,deletedQuestions,nextId,examQuestions,savedPapers,instrHTML,coverPage,curriculumLinks:CURRICULUM_SKILL_LINKS,youtubeLinks,customSubjects,customYearLevels,customAuthors,deletedAuthors,customLearningAreas,deletedLearningAreas,learningAreaSubjects,learningAreaYearLevels,customBanks,schools,schoolAccounts,selectedSchoolId,homeClasses,curriculumManagerState,activeBankFilter,activeAddQBankFilter,currentRole,examTitle:(document.getElementById('exam-title')||{}).value||'Untitled Exam',examDetails:getExamDetails()}));
+    const storedSavedPapers=typeof examPapersForLocalStorage==='function'?examPapersForLocalStorage():savedPapers;
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({questions,deletedQuestions,nextId,savedPapers:storedSavedPapers,instrHTML,coverPage,examTextDefaults,examPageZoom,customBanks,questionBankAvailability,schools,schoolAccounts,selectedSchoolId,homeClasses,activeBankFilter,activeAddQBankFilter,currentRole,examTitle:(document.getElementById('exam-title')||{}).value||'Untitled Exam',examDetails:getExamDetails()}));
   }catch(e){console.warn('Could not save exam builder state',e);}
 }
 function loadState(){
   try{
     const raw=localStorage.getItem(STORAGE_KEY);
-    if(!raw)return;
+    if(!raw){applyActiveExamTextDraft();return;}
     const state=JSON.parse(raw);
     questions=Array.isArray(state.questions)?state.questions.map(safeNormalizeQuestion):[];
     deletedQuestions=Array.isArray(state.deletedQuestions)?state.deletedQuestions.map(q=>safeNormalizeQuestion(q)).map((q,i)=>({...q,deletedAt:state.deletedQuestions[i]?.deletedAt||new Date().toISOString(),deletedSource:state.deletedQuestions[i]?.deletedSource||'question-bank'})):[];
     cleanupDeletedQuestions();
     nextId=state.nextId||((questions.concat(deletedQuestions).reduce((m,q)=>Math.max(m,q.id||0),0))+1);
-    examQuestions=Array.isArray(state.examQuestions)?state.examQuestions.map(safeNormalizeQuestion):[];
+    examQuestions=[];
     savedPapers=Array.isArray(state.savedPapers)?state.savedPapers:[];
+    examBuilderMode='edit';
+    examPageBreaks=[];
+    const savedExamPageZoom=Number(state.examPageZoom);
+    examPageZoom=!savedExamPageZoom||Math.abs(savedExamPageZoom-.72)<.001?1:Math.min(1,Math.max(.45,savedExamPageZoom));
     if(!questions.length){const recovered=recoverQuestionsFromState(state);if(recovered.length){questions=recovered;nextId=Math.max(nextId,questions.reduce((m,q)=>Math.max(m,q.id||0),0)+1);console.warn('Recovered Question Bank from saved papers/exam questions');}}
     customBanks=normaliseCustomBanks(state.customBanks);
+    questionBankAvailability=normaliseQuestionBankAvailability(state.questionBankAvailability);
     activeBankFilter=state.activeBankFilter||'private';
     if(questions.length&&!questions.some(q=>(q.bank||'private')===activeBankFilter))activeBankFilter=questions[0].bank||'private';
     activeAddQBankFilter=state.activeAddQBankFilter||activeBankFilter;
@@ -773,23 +1053,28 @@ function loadState(){
     selectedSchoolId=schools.some(s=>s.id===state.selectedSchoolId)?state.selectedSchoolId:(schools[0]?.id||'');
     schoolAccounts=normaliseSchoolAccounts(state.schoolAccounts,schools.map(s=>s.id));
     homeClasses=typeof normaliseHomeClasses==='function'?normaliseHomeClasses(state.homeClasses):(Array.isArray(state.homeClasses)?state.homeClasses:[]);
-    instrHTML={...instrHTML,...(state.instrHTML||{})};
+    examTextDefaults={...(state.examTextDefaults&&typeof state.examTextDefaults==='object'?state.examTextDefaults:{}),...loadStoredExamTextDefaults()};
+    instrHTML={...instrHTML,...upgradeDefaultInstructionHtml(state.instrHTML||{})};
     coverPage={...DEFAULT_COVER_PAGE,...DEFAULT_COVER_PAGE_HTML,...(state.coverPage||{})};if(!coverPage.approvedMaterials&&!coverPage.materialsSupplied&&!coverPage.instructions&&!coverPage.approvedMaterialsHtml&&!coverPage.materialsSuppliedHtml&&!coverPage.instructionsHtml)coverPage={...DEFAULT_COVER_PAGE,...DEFAULT_COVER_PAGE_HTML};
-    customSubjects=Array.isArray(state.customSubjects)?[...new Set(state.customSubjects.map(s=>String(s||'').trim()).filter(Boolean))]:[];
-    deletedLearningAreas=Array.isArray(state.deletedLearningAreas)?[...new Set(state.deletedLearningAreas.map(normalizeLearningAreaName).filter(Boolean))]:['Science'];
-    const hasSavedLearningAreaSubjects=state.learningAreaSubjects&&typeof state.learningAreaSubjects==='object'&&Object.keys(state.learningAreaSubjects).length>0;
-    learningAreaSubjects=normalizeLearningAreaSubjects(state.learningAreaSubjects);
-    if(!hasSavedLearningAreaSubjects&&customSubjects.length)setLearningAreaSubjectList('Mathematics',[...ensureLearningAreaSubjectRecord('Mathematics'),...customSubjects]);
-    customYearLevels=Array.isArray(state.customYearLevels)?[...new Set(state.customYearLevels.map(s=>String(s||'').trim()).filter(Boolean))]:[];
-    customAuthors=Array.isArray(state.customAuthors)?[...new Set(state.customAuthors.map(normalizeAuthorName).filter(Boolean))]:[];
-    deletedAuthors=Array.isArray(state.deletedAuthors)?[...new Set(state.deletedAuthors.map(normalizeAuthorName).filter(Boolean))]:[];
-    customLearningAreas=Array.isArray(state.customLearningAreas)?[...new Set(state.customLearningAreas.map(s=>String(s||'').trim()).filter(area=>area&&!(deletedLearningAreas||[]).includes(normalizeLearningAreaName(area))))]:['Mathematics'];
-if(!customLearningAreas.length)customLearningAreas=['Mathematics'];
-    if(state.curriculumManagerState)curriculumManagerState={...curriculumManagerState,...state.curriculumManagerState,learningArea:String(state.curriculumManagerState.learningArea||'Mathematics').trim()||'Mathematics'};
-    if(Array.isArray(state.curriculumLinks)&&state.curriculumLinks.length)setRuntimeCurriculumLinks(state.curriculumLinks,{silent:true});
-    youtubeLinks=Array.isArray(state.youtubeLinks)?state.youtubeLinks.map(normalizeYoutubeLink).filter(link=>link.title&&link.url):[];
     if(state.examTitle)document.getElementById('exam-title').value=state.examTitle;
     applyExamDetails(state.examDetails||{});
+    const defaultKey=examTextDefaultsKey(getExamDetails());
+    const activeDraft=loadActiveExamTextDraft();
+    const activeDraftKey=activeDraft?examTextDefaultsKey(activeDraft.details||{}):'';
+    if(activeDraft&&activeDraftKey===defaultKey){
+      if(activeDraft.coverPage)coverPage={...coverPage,...activeDraft.coverPage};
+      if(activeDraft.instrHTML)instrHTML={...instrHTML,...activeDraft.instrHTML};
+    }else if(examTextDefaults[defaultKey]){
+      applyExamTextDefaultsForCurrentExam();
+    }
+    applyStoredExamInstructions();
+    if(!coverPageHasContent(coverPage))coverPage={...coverDefaultsForDetails(getExamDetails())};
+    if(state.coverPage||state.instrHTML||activeDraftKey===defaultKey||examTextDefaults[defaultKey]){
+      examTextDefaults[defaultKey]={coverPage:{...coverPage},instrHTML:{...instrHTML}};
+      persistExamTextDefaults();
+      persistActiveExamTextDraft(getExamDetails());
+      persistCurrentExamInstructions();
+    }
   }catch(e){console.warn('Could not load exam builder state',e);}
 }
 
@@ -812,6 +1097,36 @@ async function loadQuestionsFromSupabase(){
     saveState();
     return true;
   }catch(e){console.error('Could not load questions from Supabase:',e);showToast('Could not load Supabase question bank',true);return false;}
+}
+async function loadQuestionBanksFromSupabase(){
+  if(!supabaseClient)return false;
+  try{
+    const {data,error}=await supabaseClient.from('question_banks').select('id,name,visibility,icon,enabled,is_builtin,created_at').order('is_builtin',{ascending:false}).order('name',{ascending:true});
+    if(error)throw error;
+    if(!Array.isArray(data)||!data.length)return false;
+    questionBankAvailability=normaliseQuestionBankAvailability(Object.fromEntries(data.map(row=>[row.id,row.enabled!==false])));
+    customBanks=normaliseCustomBanks(data.filter(row=>!row.is_builtin&&!BUILT_IN_BANKS.some(bank=>bank.id===row.id)).map(row=>({id:row.id,name:row.name,visibility:row.visibility,icon:row.icon||'ti-folder',createdAt:row.created_at})));
+    saveState();
+    syncBankTabs();
+    return true;
+  }catch(e){
+    console.warn('Could not load question bank availability from Supabase. Using the local cache.',e);
+    return false;
+  }
+}
+async function saveQuestionBankToSupabase(bank){
+  if(!supabaseClient||!bank)return false;
+  try{
+    const row={id:bank.id,name:bank.name,visibility:bank.visibility||'private',icon:bank.icon||'ti-folder',enabled:isQuestionBankEnabled(bank.id),is_builtin:BUILT_IN_BANKS.some(item=>item.id===bank.id),updated_at:new Date().toISOString()};
+    const {error}=await supabaseClient.from('question_banks').upsert(row,{onConflict:'id'});
+    if(error)throw error;
+    return true;
+  }catch(e){console.warn('Could not save question bank availability to Supabase:',e);return false;}
+}
+async function deleteQuestionBankFromSupabase(id){
+  if(!supabaseClient)return false;
+  try{const {error}=await supabaseClient.from('question_banks').delete().eq('id',id);if(error)throw error;return true;}
+  catch(e){console.warn('Could not remove question bank from Supabase:',e);return false;}
 }
 function schoolSupabaseRow(s){
   return {
@@ -1009,25 +1324,29 @@ function typeClass(t){return t==='mc'?'tag-mc':t==='tf'?'tag-mc':t==='sa'?'tag-s
 function typeShort(t){return t==='mc'?'MCQ':t==='tf'?'T/F':t==='sa'?'SA':'ER';}
 const BUILT_IN_BANKS=[
   {id:'private',name:'Private Bank',visibility:'private',icon:'ti-lock'},
-  {id:'brainforge',name:'Quero Bank',visibility:'shared',icon:'ti-books'},
+  {id:'permitted',name:'Permitted Bank',visibility:'shared',icon:'ti-shield-check'},
+  {id:'brainforge',name:'Quero Bank',visibility:'shared',icon:'ti-flame'},
   {id:'vcaa',name:'VCAA Bank',visibility:'shared',icon:'ti-certificate'},
   {id:'global',name:'Live Quiz Bank',visibility:'public',icon:'ti-world'}
 ];
 function bankSlug(name){let slug=String(name||'').trim().toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');return slug||'bank';}
-function normaliseCustomBanks(value){const seen=new Set(BUILT_IN_BANKS.map(b=>b.id)),rows=[];(Array.isArray(value)?value:[]).forEach((b,i)=>{const name=String(b?.name||'').trim();if(!name)return;let id=String(b?.id||'').trim()||`custom-${bankSlug(name)}`;if(BUILT_IN_BANKS.some(x=>x.id===id))id=`custom-${id}`;let base=id,n=2;while(seen.has(id)){id=`${base}-${n++}`;}seen.add(id);rows.push({id,name,visibility:['private','school','shared','public'].includes(b?.visibility)?b.visibility:'private',createdAt:b?.createdAt||new Date().toISOString()});});return rows;}
-function allQuestionBanks(){const base=[...BUILT_IN_BANKS,...normaliseCustomBanks(customBanks)],seen=new Set(base.map(b=>b.id));questions.forEach(q=>{const id=q.bank||'private';if(id&&!seen.has(id)){seen.add(id);base.push({id,name:id.replace(/^custom-/i,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),visibility:'imported',icon:'ti-folder'});}});return base;}
+function normaliseCustomBanks(value){const seen=new Set(BUILT_IN_BANKS.map(b=>b.id)),rows=[];(Array.isArray(value)?value:[]).forEach((b,i)=>{const name=String(b?.name||'').trim();if(!name)return;let id=String(b?.id||'').trim()||`custom-${bankSlug(name)}`;if(BUILT_IN_BANKS.some(x=>x.id===id))id=`custom-${id}`;let base=id,n=2;while(seen.has(id)){id=`${base}-${n++}`;}seen.add(id);rows.push({id,name,visibility:['private','school','shared','public'].includes(b?.visibility)?b.visibility:'private',icon:b?.icon||'ti-folder',createdAt:b?.createdAt||new Date().toISOString()});});return rows;}
+function normaliseQuestionBankAvailability(value){const result={};if(value&&typeof value==='object')Object.entries(value).forEach(([id,enabled])=>{const key=String(id||'').trim();if(key)result[key]=enabled!==false;});return result;}
+function isQuestionBankEnabled(id){return questionBankAvailability[String(id||'private')]!==false;}
+function questionCanBeUsed(q){return isQuestionBankEnabled(q?.bank||'private');}
+function usableQuestions(source){return (Array.isArray(source)?source:questions).filter(questionCanBeUsed);}
+function allQuestionBanks(){const base=[...BUILT_IN_BANKS,...normaliseCustomBanks(customBanks)],seen=new Set(base.map(b=>b.id));questions.forEach(q=>{const id=q.bank||'private';if(id&&!seen.has(id)){seen.add(id);base.push({id,name:id.replace(/^custom-/i,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),visibility:'imported',icon:'ti-folder'});}});return base.map(bank=>({...bank,enabled:isQuestionBankEnabled(bank.id)}));}
+function availableQuestionBanks(includeDisabledForAdmin=false){return allQuestionBanks().filter(bank=>bank.enabled||(includeDisabledForAdmin&&isAdminRole()));}
 function bankExists(id){return allQuestionBanks().some(b=>b.id===id);}
 function bankLabel(b){return allQuestionBanks().find(x=>x.id===b)?.name||'Private Bank';}
 function bankIcon(b){return allQuestionBanks().find(x=>x.id===b)?.icon||'ti-folder';}
 function isAdminRole(){return currentRole==='admin';}
 function sourceTypeLabel(type){return type==='data'?'Data':'Source';}
 const BASE_SUBJECT_OPTIONS=['F-6 Mathematics','F-6 Science','7-10A Mathematics','7-10A Science','Foundation Mathematics','General Mathematics','Mathematical Methods','Specialist Mathematics','Physics','Chemistry','Biology','Psychology'];
-const DEFAULT_LEARNING_AREA_SUBJECTS={
-  Mathematics:['F-6 Mathematics','7-10A Mathematics','Foundation Mathematics','General Mathematics','Mathematical Methods','Specialist Mathematics']
-};
-const YEAR_LEVEL_OPTIONS=['F','2','3','4','5','6','7','8','9','10','10A','11 VCE','12 VCE'];
-const DEFAULT_AUTHOR_OPTIONS=['Original','VCAA','VCAA: NHT','AI-Generated','Teacher-Created','School-Created'];
-const CURRICULUM_SKILL_LINKS=[{"topic":"Networks","subtopic":"Features of Networks","skill":"I can identify the number of vertices","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Features of Networks","skill":"I can identify the number of edge (loop)","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Features of Networks","skill":"I can calculate the degree of a vertex","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Features of Networks","skill":"I can calculate the sum of degree of a graph (handshaking lemma)","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Features of Networks","skill":"I can draw graph using graph notation","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Euler's Formula","skill":"I can use Euler's formula to prove that the graph is a Planar graph","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Euler's Formula","skill":"I can use Euler's formula to find the number of: edges, vertices or faces","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Simple graphs","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw complement of Simple graph","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Regular graph","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Cycle graph","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Isolated vertex","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Degenerate graphs","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Complete graphs","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Connected graphs","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw a bridge in Connected graph","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Subgraphs","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Isomorphic (Equivalent) graph","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Planar and Non-Planar graph","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Weighted graphs","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Tree (Spanning tree)","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Directed graph","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Bipartite graph","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Graphs","skill":"I can identify, interpret, and draw Polyhedral graph (from platonic solids)","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Ajacency Matrix","skill":"I can draw a network diagram from ajacency matrix","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Ajacency Matrix","skill":"I can create an ajacency matrix from the network diagram","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Ajacency Matrix","skill":"I can use Euler's formula to find the number of: edges, vertices or faces","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Ajacency Matrix","skill":"I can use ajacency matrix to count walks in graph (power: steps)","yearLevels":["11 VCE"],"subjects":["Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Walk","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Trail","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Circuit","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Path","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Cycle","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Eulerian Trail","yearLevels":["11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Eulerian Circuit","yearLevels":["11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Hamiltonian Path","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can identify and find Hamiltonian Cycle","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Types of Walks","skill":"I can find the shortest path by inspection (Dijkstraâ€™s algorithm)","yearLevels":["10","10A","11 VCE","12 VCE"],"subjects":["7-10A Mathematics","General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Trees and Minimum Connector","skill":"I can find a spanning Tree","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics","Specialist Mathematics"]},{"topic":"Networks","subtopic":"Trees and Minimum Connector","skill":"I can find the minimum spanning tree (Prims algorithm)","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Trees and Minimum Connector","skill":"I can apply spanning tree to real-world context (minimum connector)","yearLevels":["11 VCE","12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Flow","skill":"I can identify maximum flow (minimum capacity)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Flow","skill":"I can identify a valid cut","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Flow","skill":"I can calculate the cut capacity","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Flow","skill":"I can calculate the minimum cut capacity (maximum flow)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Matching and Allocation","skill":"I can use bipartite graph to allocate task (Hungarian algorithm)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can construct activity networks from precedence table","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can identify dummy activities from the precedence table","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can construct activity networks from precedence table (with dummy)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can construct weigthed activity network from the precedence table","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can calculate and record earliest start time (EST) using forward scanning","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can calculate and record latest start time (LST) using backward scanning","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can calculate and interpret float time (LST-EST)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can identify critical path (longest path)","yearLevels":["12 VCE"],"subjects":["General Mathematics"]},{"topic":"Networks","subtopic":"Activity Networks","skill":"I can reduce the completion time of the critical path (crashing) and minimise cost","yearLevels":["12 VCE"],"subjects":["General Mathematics"]}];
+const DEFAULT_LEARNING_AREA_SUBJECTS={};
+const YEAR_LEVEL_OPTIONS=[];
+const DEFAULT_AUTHOR_OPTIONS=[];
+const CURRICULUM_SKILL_LINKS=[];
 function normalizeYearLevelValue(v){const map={VCE11:'11 VCE',VCE12:'12 VCE'};return map[v]||v;}
 function normalizeYearLevels(value){
   const raw=Array.isArray(value)?value:String(value||'').split(/,|\s+-\s+/);
@@ -1041,13 +1360,13 @@ function normalizeCurriculumYearLevels(value){
 function normalizeCurriculumLink(link){
   const subjects=splitCreatorMultiValue(link.subjects||link.linkedSubjects||link.linked_subjects||[]);
   const yearLevels=normalizeCurriculumYearLevels(link.yearLevels||link.year_levels||link.linkedYearLevels||[]);
-  return{id:link.id||link.supabaseId||'',learningArea:normalizeLearningAreaName(link.learningArea||link.learning_area||link.area||'Mathematics'),topic:String(link.topic||'').trim(),subtopic:String(link.subtopic||'').trim(),skill:String(link.skill||'').trim(),subjects,yearLevels,topicOrder:Number(link.topicOrder??link.topic_order??0)||0,subtopicOrder:Number(link.subtopicOrder??link.subtopic_order??0)||0,skillOrder:Number(link.skillOrder??link.skill_order??0)||0,active:link.active!==false};
+  return{id:link.id||link.supabaseId||'',learningArea:normalizeLearningAreaName(link.learningArea||link.learning_area||link.area),topic:String(link.topic||'').trim(),subtopic:String(link.subtopic||'').trim(),skill:String(link.skill||'').trim(),subjects,yearLevels,topicOrder:Number(link.topicOrder??link.topic_order??0)||0,subtopicOrder:Number(link.subtopicOrder??link.subtopic_order??0)||0,skillOrder:Number(link.skillOrder??link.skill_order??0)||0,active:link.active!==false};
 }
 function normalizeYoutubeLink(link){
   return{
     id:link.id||link.supabaseId||'',
     curriculumSkillId:link.curriculumSkillId||link.curriculum_skill_id||'',
-    learningArea:normalizeLearningAreaName(link.learningArea||link.learning_area||'Mathematics'),
+    learningArea:normalizeLearningAreaName(link.learningArea||link.learning_area),
     topic:String(link.topic||'').trim(),
     subtopic:String(link.subtopic||'').trim(),
     skill:String(link.skill||'').trim(),
@@ -1058,7 +1377,7 @@ function normalizeYoutubeLink(link){
   };
 }
 function curriculumLinkKeyParts(link){
-  return{learningArea:normalizeLearningAreaName(link?.learningArea||link?.learning_area||link?.area||'Mathematics'),topic:String(link?.topic||'').trim(),subtopic:String(link?.subtopic||'').trim(),skill:String(link?.skill||'').trim()};
+  return{learningArea:normalizeLearningAreaName(link?.learningArea||link?.learning_area||link?.area),topic:String(link?.topic||'').trim(),subtopic:String(link?.subtopic||'').trim(),skill:String(link?.skill||'').trim()};
 }
 function syncYoutubeLinkSkillFields(item,link){
   const parts=curriculumLinkKeyParts(link);
@@ -1069,12 +1388,26 @@ function syncYoutubeLinkSkillFields(item,link){
   item.skill=parts.skill;
   return item;
 }
+function reconcileYoutubeLinksWithCurriculumMap(){
+  let changed=0;
+  (Array.isArray(youtubeLinks)?youtubeLinks:[]).forEach(item=>{
+    const skillId=String(item.curriculumSkillId||item.curriculum_skill_id||'').trim();
+    if(!skillId)return;
+    const link=CURRICULUM_SKILL_LINKS.find(candidate=>String(candidate.id||'').trim()===skillId);
+    if(!link)return;
+    const before=curriculumLinkKeyParts(item),after=curriculumLinkKeyParts(link);
+    if(before.learningArea===after.learningArea&&before.topic===after.topic&&before.subtopic===after.subtopic&&before.skill===after.skill)return;
+    syncYoutubeLinkSkillFields(item,link);
+    changed++;
+  });
+  return changed;
+}
 function youtubeLinksForCurriculumSkill(link){
   const parts=curriculumLinkKeyParts(link);
   if(!parts.skill)return [];
   return (Array.isArray(youtubeLinks)?youtubeLinks:[]).map(normalizeYoutubeLink).filter(item=>{
     if(item.active===false||!item.title||!item.url)return false;
-    return normalizeLearningAreaName(item.learningArea||'Mathematics')===parts.learningArea&&item.topic===parts.topic&&item.subtopic===parts.subtopic&&item.skill===parts.skill;
+    return normalizeLearningAreaName(item.learningArea)===parts.learningArea&&item.topic===parts.topic&&item.subtopic===parts.subtopic&&item.skill===parts.skill;
   }).sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)||String(a.title).localeCompare(String(b.title),undefined,{numeric:true,sensitivity:'base'}));
 }
 function refreshCurriculumConsumers(){
@@ -1093,7 +1426,7 @@ function refreshCurriculumConsumers(){
 }
 function setRuntimeCurriculumLinks(links,{silent=false}={}){
   CURRICULUM_SKILL_LINKS.length=0;
-  (links||[]).map(normalizeCurriculumLink).filter(l=>l.topic&&l.subtopic&&l.skill&&l.active!==false).forEach(l=>CURRICULUM_SKILL_LINKS.push(l));
+  (links||[]).map(normalizeCurriculumLink).filter(l=>l.learningArea&&l.topic&&l.active!==false).forEach(l=>CURRICULUM_SKILL_LINKS.push(l));
   ensureCurriculumProgressionOrders();
   refreshCurriculumConsumers();
   syncQuestionsAfterCurriculumLinkChange({silent:true});
@@ -1102,7 +1435,8 @@ function setRuntimeCurriculumLinks(links,{silent=false}={}){
 function ensureCurriculumProgressionOrders(){
   const topicsByArea=new Map(),subtopicsByTopic=new Map(),skillsBySubtopic=new Map();
   CURRICULUM_SKILL_LINKS.forEach((link,index)=>{
-    const area=normalizeLearningAreaName(link.learningArea||'Mathematics'),topicName=link.topic||'',topic=area+'||'+topicName,subtopic=area+'||'+topicName+'||'+(link.subtopic||''),skill=link.skill||'';
+    const area=normalizeLearningAreaName(link.learningArea),topicName=link.topic||'',topic=area+'||'+topicName,subtopic=area+'||'+topicName+'||'+(link.subtopic||''),skill=link.skill||'';
+    if(!area||!topicName)return;
     if(!topicsByArea.has(area))topicsByArea.set(area,new Map());
     const topicMap=topicsByArea.get(area);
     if(!topicMap.has(topicName))topicMap.set(topicName,Number(link.topicOrder)||topicMap.size+1);
@@ -1118,90 +1452,84 @@ function ensureCurriculumProgressionOrders(){
     if(!Number(link.skillOrder))link.skillOrder=skillMap.get(skill);
   });
 }
+function curriculumMapRows(){
+  ensureCurriculumProgressionOrders();
+  return curriculumLearningAreas().map((area,areaIndex)=>{
+    const topicMap=new Map();
+    curriculumLinksForArea(area).forEach(raw=>{
+      const link=normalizeCurriculumLink(raw);
+      if(!link.topic)return;
+      if(!topicMap.has(link.topic))topicMap.set(link.topic,{name:link.topic,order:Number(link.topicOrder)||topicMap.size+1,subtopics:new Map()});
+      const topic=topicMap.get(link.topic);
+      if(!link.subtopic)return;
+      if(!topic.subtopics.has(link.subtopic))topic.subtopics.set(link.subtopic,{name:link.subtopic,order:Number(link.subtopicOrder)||topic.subtopics.size+1,skills:[]});
+      if(link.skill)topic.subtopics.get(link.subtopic).skills.push({id:link.id||'',name:link.skill,subjects:[...(link.subjects||[])],yearLevels:[...(link.yearLevels||[])],order:Number(link.skillOrder)||topic.subtopics.get(link.subtopic).skills.length+1,active:link.active!==false});
+    });
+    const topics=[...topicMap.values()].sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'})).map(topic=>({
+      name:topic.name,
+      order:topic.order,
+      subtopics:[...topic.subtopics.values()].sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'})).map(subtopic=>({name:subtopic.name,order:subtopic.order,skills:subtopic.skills.sort((a,b)=>a.order-b.order||a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}))}))
+    }));
+    return{learning_area:area,display_order:areaIndex+1,topics,subjects:[...ensureLearningAreaSubjectRecord(area)],year_levels:[...ensureLearningAreaYearLevelRecord(area)],updated_by:currentUser?.id||null};
+  });
+}
+function applyCurriculumMapRows(rows){
+  const links=[],areas=[];
+  learningAreaSubjects={};
+  learningAreaYearLevels={};
+  (rows||[]).forEach(row=>{
+    const area=normalizeLearningAreaName(row.learning_area||row.learningArea);
+    if(!area)return;
+    areas.push(area);
+    setLearningAreaSubjectList(area,row.subjects||[]);
+    setLearningAreaYearLevelList(area,row.year_levels||row.yearLevels||[]);
+    const topics=Array.isArray(row.topics)?row.topics:[];
+    topics.forEach((topic,topicIndex)=>{
+      const topicName=String(topic?.name||topic?.topic||'').trim();
+      if(!topicName)return;
+      const topicOrder=Number(topic?.order??topic?.topicOrder??topicIndex+1)||topicIndex+1;
+      const subtopics=Array.isArray(topic?.subtopics)?topic.subtopics:[];
+      if(!subtopics.length){links.push({learningArea:area,topic:topicName,subtopic:'',skill:'',subjects:[],yearLevels:[],topicOrder,subtopicOrder:0,skillOrder:0,active:true});return;}
+      subtopics.forEach((subtopic,subtopicIndex)=>{
+        const subtopicName=String(subtopic?.name||subtopic?.subtopic||'').trim();
+        if(!subtopicName)return;
+        const subtopicOrder=Number(subtopic?.order??subtopic?.subtopicOrder??subtopicIndex+1)||subtopicIndex+1;
+        const skills=Array.isArray(subtopic?.skills)?subtopic.skills:[];
+        if(!skills.length){links.push({learningArea:area,topic:topicName,subtopic:subtopicName,skill:'',subjects:[],yearLevels:[],topicOrder,subtopicOrder,skillOrder:0,active:true});return;}
+        skills.forEach((skill,skillIndex)=>{
+          const item=typeof skill==='string'?{name:skill}:skill||{};
+          const skillName=String(item.name||item.skill||'').trim();
+          if(!skillName)return;
+          links.push({id:item.id||'',learningArea:area,topic:topicName,subtopic:subtopicName,skill:skillName,subjects:item.subjects||[],yearLevels:item.yearLevels||item.year_levels||[],topicOrder,subtopicOrder,skillOrder:Number(item.order??item.skillOrder??skillIndex+1)||skillIndex+1,active:item.active!==false});
+        });
+      });
+    });
+  });
+  customLearningAreas=[...new Set(areas)];
+  deletedLearningAreas=[];
+  setRuntimeCurriculumLinks(links,{silent:true});
+  customSubjects=subjectRowsFromLearningAreas(false).map(row=>row.name);
+  customYearLevels=[...new Set(yearRowsFromLearningAreas(false).map(row=>row.name))];
+}
 async function loadCurriculumFromSupabase(){
   if(!supabaseClient)return false;
   try{
-    try{
-      let subjectResult=await supabaseClient.from('curriculum_subjects').select('name,learning_area').order('learning_area',{ascending:true}).order('name',{ascending:true});
-      if(subjectResult.error&&/(learning_area|column)/i.test(String(subjectResult.error.message||'')))subjectResult=await supabaseClient.from('curriculum_subjects').select('name').order('name',{ascending:true});
-      const {data:subjectData,error:subjectError}=subjectResult;
-      if(!subjectError&&Array.isArray(subjectData)){
-        const grouped={};
-        subjectData.forEach(row=>{
-          const name=normalizeSubjectName(row.name);
-          if(!name)return;
-          const area=normalizeLearningAreaName(row.learning_area||'Mathematics');
-          if(!grouped[area])grouped[area]=[];
-          grouped[area].push(name);
-        });
-        if(Object.keys(grouped).length){
-          Object.entries(grouped).forEach(([area,subjects])=>setLearningAreaSubjectList(area,subjects));
-          customSubjects=subjectRowsFromLearningAreas(false).map(row=>row.name);
-        }
-      }
-    }catch(subjectLoadError){console.warn('Could not load custom curriculum subjects:',subjectLoadError);}
-    try{
-      let yearResult=await supabaseClient.from('curriculum_year_levels').select('name,learning_area').order('learning_area',{ascending:true}).order('name',{ascending:true});
-      if(yearResult.error&&/(learning_area|column)/i.test(String(yearResult.error.message||'')))yearResult=await supabaseClient.from('curriculum_year_levels').select('name').order('name',{ascending:true});
-      const yearData=yearResult.data,yearError=yearResult.error;
-      if(!yearError&&Array.isArray(yearData)){
-        const grouped={};
-        yearData.forEach(row=>{const name=normalizeYearLevelName(row.name);if(!name)return;const area=normalizeLearningAreaName(row.learning_area||'Mathematics');if(!grouped[area])grouped[area]=[];grouped[area].push(name);});
-        if(Object.keys(grouped).length)Object.entries(grouped).forEach(([area,years])=>setLearningAreaYearLevelList(area,years));
-        customYearLevels=[...new Set(yearData.map(row=>normalizeYearLevelName(row.name)).filter(Boolean))];
-      }
-      try{const {data:authorData,error:authorError}=await supabaseClient.from('curriculum_authors').select('name').order('name');if(!authorError&&Array.isArray(authorData))customAuthors=[...new Set(authorData.map(row=>normalizeAuthorName(row.name)).filter(Boolean))];}catch(authorLoadError){console.warn('Could not load curriculum authors:',authorLoadError);}
-    }catch(yearLoadError){console.warn('Could not load custom curriculum year levels:',yearLoadError);}
-    const localOrders=new Map(CURRICULUM_SKILL_LINKS.map(l=>[`${normalizeLearningAreaName(l.learningArea||'Mathematics')}||${l.topic}||${l.subtopic}||${l.skill}`,{topicOrder:l.topicOrder,subtopicOrder:l.subtopicOrder,skillOrder:l.skillOrder}]));
-    let data,error;
-    let ordered=await supabaseClient.from('curriculum_skills').select('*').order('topic_order',{ascending:true}).order('topic',{ascending:true}).order('subtopic_order',{ascending:true}).order('subtopic',{ascending:true}).order('skill_order',{ascending:true}).order('skill',{ascending:true});
-    data=ordered.data;error=ordered.error;
-    if(error&&/(order|column|topic_order|subtopic_order|skill_order)/i.test(String(error.message||''))){
-      const fallback=await supabaseClient.from('curriculum_skills').select('*').order('topic',{ascending:true}).order('subtopic',{ascending:true}).order('skill',{ascending:true});
-      data=fallback.data;error=fallback.error;
-    }
-    if(error){console.warn('Could not load curriculum from Supabase:',error);return false;}
-    if(!Array.isArray(data)||!data.length)return false;
-    setRuntimeCurriculumLinks(data.map(row=>{
-      const area=normalizeLearningAreaName(row.learning_area||row.learningArea||'Mathematics'),key=`${area}||${row.topic}||${row.subtopic}||${row.skill}`,local=localOrders.get(key)||{};
-      return{id:row.id,learningArea:area,topic:row.topic,subtopic:row.subtopic,skill:row.skill,subjects:row.subjects||row.linked_subjects||[],yearLevels:row.year_levels||row.yearLevels||[],topicOrder:Number(row.topic_order)||Number(local.topicOrder)||0,subtopicOrder:Number(row.subtopic_order)||Number(local.subtopicOrder)||0,skillOrder:Number(row.skill_order)||Number(local.skillOrder)||0,active:row.active!==false};
-    }));
+    const {data,error}=await supabaseClient.from('curriculum_map').select('*').order('display_order',{ascending:true}).order('learning_area',{ascending:true});
+    if(error)throw error;
+    applyCurriculumMapRows(Array.isArray(data)?data:[]);
     await loadCurriculumYoutubeLinksFromSupabase();
+    const repairedYoutubeLinks=reconcileYoutubeLinksWithCurriculumMap();
+    if(repairedYoutubeLinks&&!await saveCurriculumYoutubeLinksToSupabase())console.warn('Could not persist repaired curriculum YouTube link paths.');
+    await loadCurriculumAuthorsFromSupabase();
+    if(typeof renderCurriculumManager==='function')renderCurriculumManager();
     if(typeof renderCurriculumYoutubeLinks==='function')renderCurriculumYoutubeLinks();
+    if(typeof renderBank==='function')renderBank();
+    if(typeof renderAddQList==='function')renderAddQList();
+    if(typeof setCurriculumSaveStatus==='function')setCurriculumSaveStatus('saved');
+    saveCurriculumCache();
     saveState();
     return true;
-  }catch(e){console.warn('Could not load curriculum from Supabase:',e);return false;}
-}
-function curriculumRow(link,{withOrder=true}={}){
-  const row={id:link.id||undefined,learning_area:normalizeLearningAreaName(link.learningArea||'Mathematics'),topic:link.topic,subtopic:link.subtopic,skill:link.skill,subjects:link.subjects||[],year_levels:link.yearLevels||[],active:link.active!==false};
-  if(withOrder){row.topic_order=Number(link.topicOrder)||0;row.subtopic_order=Number(link.subtopicOrder)||0;row.skill_order=Number(link.skillOrder)||0;}
-  return row;
-}
-function curriculumRowsWithoutOrder(rows){return rows.map(row=>{const copy={...row};delete copy.topic_order;delete copy.subtopic_order;delete copy.skill_order;delete copy.learning_area;return copy;});}
-async function supabaseWriteCurriculumRows(existing,fresh){
-  const write=async withOrder=>{
-    const existingRows=withOrder?existing:curriculumRowsWithoutOrder(existing);
-    const freshRows=withOrder?fresh:curriculumRowsWithoutOrder(fresh);
-    if(existingRows.length){
-      const {error}=await supabaseClient.from('curriculum_skills').upsert(existingRows).select();
-      if(error)throw error;
-    }
-    if(freshRows.length){
-      const {data,error}=await supabaseClient.from('curriculum_skills').insert(freshRows).select();
-      if(error)throw error;
-      return data||[];
-    }
-    return [];
-  };
-  try{return await write(true);}
-  catch(e){
-    const msg=String(e?.message||'').toLowerCase();
-    if(msg.includes('topic_order')||msg.includes('subtopic_order')||msg.includes('skill_order')||msg.includes('column')){
-      console.warn('Curriculum order columns are not available yet; saving hierarchy without order columns.',e);
-      return await write(false);
-    }
-    throw e;
-  }
+  }catch(e){console.warn('Could not load curriculum map from Supabase:',e);if(typeof setCurriculumSaveStatus==='function')setCurriculumSaveStatus('error');return false;}
 }
 function curriculumYoutubeRow(link){
   const item=normalizeYoutubeLink(link);
@@ -1219,6 +1547,17 @@ async function loadCurriculumYoutubeLinksFromSupabase(){
     youtubeLinks=Array.isArray(data)?data.map(normalizeYoutubeLink).filter(link=>link.title&&link.url&&link.active!==false):[];
     return true;
   }catch(e){console.warn('Could not load curriculum YouTube links:',e);return false;}
+}
+async function loadCurriculumAuthorsFromSupabase(){
+  if(!supabaseClient)return false;
+  try{
+    const {data,error}=await supabaseClient.from('curriculum_authors').select('name').order('name');
+    if(error)throw error;
+    customAuthors=[...new Set((data||[]).map(row=>normalizeAuthorName(row.name)).filter(Boolean))];
+    deletedAuthors=[];
+    if(typeof syncAuthorDropdowns==='function')syncAuthorDropdowns();
+    return true;
+  }catch(e){console.warn('Could not load curriculum authors:',e);return false;}
 }
 async function saveCurriculumYoutubeLinksToSupabase(){
   if(!supabaseClient)return false;
@@ -1239,8 +1578,8 @@ async function saveCurriculumYoutubeLinksToSupabase(){
       const {data,error}=await supabaseClient.from('youtube_links').insert(fresh).select();
       if(error)throw error;
       (data||[]).forEach(row=>{
-        const area=normalizeLearningAreaName(row.learning_area||'Mathematics');
-        const link=youtubeLinks.find(item=>!item.id&&normalizeLearningAreaName(item.learningArea||'Mathematics')===area&&item.topic===row.topic&&item.subtopic===row.subtopic&&item.skill===row.skill&&item.title===row.title&&item.url===row.url);
+        const area=normalizeLearningAreaName(row.learning_area);
+        const link=youtubeLinks.find(item=>!item.id&&normalizeLearningAreaName(item.learningArea)===area&&item.topic===row.topic&&item.subtopic===row.subtopic&&item.skill===row.skill&&item.title===row.title&&item.url===row.url);
         if(link)link.id=row.id;
       });
     }
@@ -1249,77 +1588,51 @@ async function saveCurriculumYoutubeLinksToSupabase(){
 }
 async function saveCurriculumToSupabase(silent=false){
   ensureCurriculumProgressionOrders();
-  saveState();
-  if(!supabaseClient){if(!silent)showToast('Curriculum saved locally. Supabase is not connected.',true);return;}
-  const btn=silent?null:document.getElementById('curriculum-save-btn'),old=btn?btn.innerHTML:'';
-  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i>Saving...';}
+  if(!supabaseClient){if(!silent)showToast('Curriculum could not be saved because Supabase is not connected.',true);return false;}
   try{
-    const rows=CURRICULUM_SKILL_LINKS.map(normalizeCurriculumLink).filter(l=>l.topic&&l.subtopic&&l.skill);
-    if(curriculumDeletedIds.length){
-      const {error}=await supabaseClient.from('curriculum_skills').delete().in('id',curriculumDeletedIds);
-      if(error)throw error;
-      curriculumDeletedIds=[];
+    const rows=curriculumMapRows();
+    const currentAreas=rows.map(row=>row.learning_area);
+    const {data:stored,error:readError}=await supabaseClient.from('curriculum_map').select('learning_area');
+    if(readError)throw readError;
+    const stale=(stored||[]).map(row=>normalizeLearningAreaName(row.learning_area)).filter(area=>!currentAreas.includes(area));
+    if(stale.length){
+      const {error:deleteError}=await supabaseClient.from('curriculum_map').delete().in('learning_area',stale);
+      if(deleteError)throw deleteError;
     }
-    const existing=rows.filter(r=>r.id).map(curriculumRow);
-    const fresh=rows.filter(r=>!r.id).map(r=>{const row=curriculumRow(r);delete row.id;return row;});
-    const savedFresh=await supabaseWriteCurriculumRows(existing,fresh);
-    savedFresh.forEach(row=>{
-      const area=normalizeLearningAreaName(row.learning_area||row.learningArea||'Mathematics');
-      const link=CURRICULUM_SKILL_LINKS.find(l=>!l.id&&normalizeLearningAreaName(l.learningArea||'Mathematics')===area&&l.topic===row.topic&&l.subtopic===row.subtopic&&l.skill===row.skill);
-      if(link)link.id=row.id;
-    });
-    await saveCurriculumYoutubeLinksToSupabase();
-    try{
-      await supabaseClient.from('curriculum_subjects').delete().neq('name','');
-      const subjectRows=subjectRowsFromLearningAreas(true);
-      if(subjectRows.length){
-        let {error:subjectError}=await supabaseClient.from('curriculum_subjects').insert(subjectRows);
-        if(subjectError&&/(learning_area|column)/i.test(String(subjectError.message||''))){
-          const legacyRows=subjectRowsFromLearningAreas(false);
-          const legacy=await supabaseClient.from('curriculum_subjects').insert(legacyRows);
-          subjectError=legacy.error;
-        }
-        if(subjectError)console.warn('Could not save custom curriculum subjects:',subjectError);
-      }
-    }catch(subjectSaveError){console.warn('Could not save custom curriculum subjects:',subjectSaveError);}
-    try{
-      await supabaseClient.from('curriculum_year_levels').delete().neq('name','');
-      const yearRows=yearRowsFromLearningAreas(true);
-      if(yearRows.length){
-        let {error:yearError}=await supabaseClient.from('curriculum_year_levels').insert(yearRows);
-        if(yearError&&/(learning_area|column)/i.test(String(yearError.message||''))){
-          const legacy=await supabaseClient.from('curriculum_year_levels').insert(yearRowsFromLearningAreas(false));
-          yearError=legacy.error;
-        }
-        if(yearError)console.warn('Could not save custom curriculum year levels:',yearError);
-      }
-      try{await supabaseClient.from('curriculum_authors').delete().neq('name','');if(customAuthors.length){const {error:authorError}=await supabaseClient.from('curriculum_authors').insert(customAuthors.map(name=>({name})));if(authorError)console.warn('Could not save curriculum authors:',authorError);}}catch(authorSaveError){console.warn('Could not save curriculum authors:',authorSaveError);}
-    }catch(yearSaveError){console.warn('Could not save custom curriculum year levels:',yearSaveError);}
+    if(rows.length){
+      const {error:mapError}=await supabaseClient.from('curriculum_map').upsert(rows,{onConflict:'learning_area'}).select('learning_area');
+      if(mapError)throw mapError;
+    }
+    curriculumDeletedIds=[];
+    const youtubeSaved=await saveCurriculumYoutubeLinksToSupabase();
+    if(!youtubeSaved)throw new Error('Curriculum hierarchy saved, but its YouTube links could not be updated.');
+    try{const {error:authorDeleteError}=await supabaseClient.from('curriculum_authors').delete().neq('name','');if(authorDeleteError)throw authorDeleteError;if(customAuthors.length){const {error:authorError}=await supabaseClient.from('curriculum_authors').insert(customAuthors.map(name=>({name})));if(authorError)throw authorError;}}catch(authorSaveError){console.warn('Could not save curriculum authors:',authorSaveError);}
+    saveCurriculumCache();
     saveState();
-    showToast('Curriculum hierarchy saved');
-  }catch(e){console.error('Curriculum save failed:',e);showToast('Curriculum save failed. Check the Supabase curriculum_skills table and policies.',true);}
-  finally{if(btn){btn.disabled=false;btn.innerHTML=old;}}
+    if(!silent)showToast('Curriculum map saved');
+    return true;
+  }catch(e){console.error('Curriculum map save failed:',e);showToast(e?.message||'Curriculum map could not be saved. Check the Supabase curriculum_map table and policies.',true);return false;}
 }
 function splitYearRange(q){const years=normalizeYearLevels(q.yearLevels||q.yearLevel||q.yearFrom||q.year||'7');return{from:years[0],to:years[years.length-1],years};}
 function formatYearRange(q){return splitYearRange(q).years.join(', ');}
 function optionList(values,selected){return values.map(v=>`<option${v===selected?' selected':''}>${esc(v)}</option>`).join('');}
 function syncYearLevel(){const from=document.getElementById('f-year-from'),to=document.getElementById('f-year-to');if(from&&to)to.value=from.value;}
 function dataForMainArea(area,curriculum){
-  const activeArea=normalizeLearningAreaName(area||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():'Mathematics'));
-  const years=typeof curriculumYearLevelValues==='function'?curriculumYearLevelValues(activeArea):DEFAULT_AREA_LEVELS;
+  const activeArea=normalizeLearningAreaName(area||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():''));
+  const years=typeof curriculumYearLevelValues==='function'?curriculumYearLevelValues(activeArea):[];
   const topics=typeof curriculumTopics==='function'?curriculumTopics(activeArea):[];
   const out={};
   years.forEach(year=>{
     out[year]={};
     topics.forEach(topic=>{
       const subtopics=typeof curriculumSubtopics==='function'?curriculumSubtopics(topic,activeArea):[];
-      out[year][topic]=subtopics.length?subtopics:['General'];
+      out[year][topic]=subtopics;
     });
   });
   return out;
 }
 function curriculumOptionsForArea(area){
-  return typeof curriculumLearningAreas==='function'?curriculumLearningAreas():[normalizeLearningAreaName(area||'Mathematics')];
+  return typeof curriculumLearningAreas==='function'?curriculumLearningAreas():[];
 }
 function setupCurriculumHierarchy(selected={}){
   if(typeof syncCreatorSubjectOptions==='function')syncCreatorSubjectOptions(selected.subjects||selected.subject||(typeof currentExamSubject==='function'?currentExamSubject():''));
@@ -1331,7 +1644,7 @@ function setupCurriculumHierarchy(selected={}){
   }
   const areaSel=document.getElementById('f-main-area'),curriculumSel=document.getElementById('f-curriculum'),yearSel=document.getElementById('f-year-from'),yearTo=document.getElementById('f-year-to'),strandSel=document.getElementById('f-strand'),subtopicSel=document.getElementById('f-subtopic'),diffSel=document.getElementById('f-difficulty');
   if(!yearSel||!strandSel||!subtopicSel)return;
-  const mainArea=normalizeLearningAreaName(selected.mainArea||areaSel?.value||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():'Mathematics'));
+  const mainArea=normalizeLearningAreaName(selected.mainArea||areaSel?.value||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():''));
   if(areaSel)areaSel.value=mainArea;
   const curriculumChoices=curriculumOptionsForArea(mainArea);
   const curriculum=curriculumChoices.includes(selected.curriculum)?selected.curriculum:(curriculumChoices.includes(curriculumSel?.value)?curriculumSel.value:curriculumChoices[0]);
@@ -1346,7 +1659,7 @@ function setupCurriculumHierarchy(selected={}){
   subtopicSel.innerHTML=optionList(subtopics,subtopic);
   if(diffSel)diffSel.innerHTML=optionList(DIFFICULTY_LEVELS,DIFFICULTY_LEVELS.includes(selected.difficulty)?selected.difficulty:'Medium');
 }
-function updateMainArea(){setupCurriculumHierarchy({mainArea:document.getElementById('f-main-area')?.value||'Mathematics',difficulty:document.getElementById('f-difficulty')?.value||'Medium'});syncYearLevel();}
-function updateCurriculumHierarchy(){const mainArea=document.getElementById('f-main-area')?.value||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():'Mathematics'),curriculum=document.getElementById('f-curriculum')?.value||mainArea,year=document.getElementById('f-year-from')?.value||'',strand=document.getElementById('f-strand')?.value||'',subtopic=document.getElementById('f-subtopic')?.value||'',difficulty=document.getElementById('f-difficulty')?.value||'Medium';setupCurriculumHierarchy({mainArea,curriculum,yearFrom:year,strand,subtopic,difficulty});syncYearLevel();}function updateStats(){const stat=document.querySelector('.sidebar-stat');if(!stat)return;stat.innerHTML=allQuestionBanks().map(b=>`<div class="sidebar-stat-row"><span>${esc(b.name)}</span><span>${questions.filter(q=>(q.bank||'private')===b.id).length}</span></div>`).join('');}
+function updateMainArea(){setupCurriculumHierarchy({mainArea:document.getElementById('f-main-area')?.value||'',difficulty:document.getElementById('f-difficulty')?.value||'Medium'});syncYearLevel();}
+function updateCurriculumHierarchy(){const mainArea=document.getElementById('f-main-area')?.value||(typeof activeCurriculumLearningArea==='function'?activeCurriculumLearningArea():''),curriculum=document.getElementById('f-curriculum')?.value||mainArea,year=document.getElementById('f-year-from')?.value||'',strand=document.getElementById('f-strand')?.value||'',subtopic=document.getElementById('f-subtopic')?.value||'',difficulty=document.getElementById('f-difficulty')?.value||'Medium';setupCurriculumHierarchy({mainArea,curriculum,yearFrom:year,strand,subtopic,difficulty});syncYearLevel();}function updateStats(){const stat=document.querySelector('.sidebar-stat');if(!stat)return;stat.innerHTML=availableQuestionBanks(true).map(b=>`<div class="sidebar-stat-row"><span>${esc(b.name)}${b.enabled?'':' (Off)'}</span><span>${questions.filter(q=>(q.bank||'private')===b.id).length}</span></div>`).join('');}
 
-function syncBankSelectOptions(id,selected){const el=document.getElementById(id);if(!el)return;const current=selected||el.value||'private';el.innerHTML=allQuestionBanks().map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');el.value=bankExists(current)?current:'private';}
+function syncBankSelectOptions(id,selected){const el=document.getElementById(id);if(!el)return;const current=selected||el.value||'private',banks=availableQuestionBanks(true);el.innerHTML=banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}${b.enabled?'':' (Off)'}</option>`).join('');el.value=banks.some(bank=>bank.id===current)?current:(banks[0]?.id||'');}

@@ -1,16 +1,16 @@
 /* Question Extractor: upload panel, extracted question cards, and extractor metadata controls. */
 
-.extractor-layout{display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(320px,1.1fr);gap:12px;min-height:0;flex:1}
+.extractor-layout{display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(320px,1.1fr);gap:12px;min-height:0;min-width:0;flex:1}
 
-.extractor-panel{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);background:var(--color-background-primary);padding:12px;min-height:0;display:flex;flex-direction:column}
+.extractor-panel{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);background:var(--color-background-primary);padding:12px;min-height:0;min-width:0;display:flex;flex-direction:column}
 
 .extractor-panel textarea{width:100%;flex:1;min-height:320px;resize:none;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px;font:14px/1.35 "Times New Roman",Times,serif;outline:none}
 
 .extractor-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
 
-.extractor-preview-list{overflow:auto;min-height:0;padding-right:2px}
+.extractor-preview-list{overflow:auto;min-height:0;min-width:0;padding-right:2px}
 
-.extractor-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px;margin-bottom:10px;background:#fff}
+.extractor-card{border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px;margin-bottom:10px;min-width:0;background:#fff}
 
 .extractor-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 
@@ -29,6 +29,10 @@
 .extractor-meta-grid .multi-select-button:after{right:10px;width:5px;height:5px;border-width:1.5px}
 
 .extractor-meta-grid .multi-select-menu{max-height:190px}
+
+.extractor-multiselect.open .multi-select-menu{z-index:10040;overscroll-behavior:contain}
+
+.extractor-multiselect .multi-select-option span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 
 .extractor-option-grid input[type=radio]{width:15px;height:15px;margin:0}
 

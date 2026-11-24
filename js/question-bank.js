@@ -43,14 +43,104 @@ function syncAddQMetadataFilters(bankQuestions){
     questionNumber:syncBankFilterSelect('addq-question-number-filter','Question number: lowest to highest',bankUniqueValues(bankQuestions,'questionNumber'))
   };
 }
+let addQuestionsLoading=false,addQuestionsLoadingTitle='Loading questions...',addQuestionsLoadingDetail='',addQuestionIndex=[],addQuestionIndexReady=false;
+function addQuestionIndexItem(row,position){
+  const fallbackId=1000000000+position,id=Math.max(1,parseInt(row.old_id,10)||fallbackId),yearLevels=Array.isArray(row.year_levels)?row.year_levels:[];
+  return{id,supabaseId:row.id,isQuestionIndex:true,bank:row.bank||'private',type:row.type||'',template:row.template||'',optionTemplate:row.option_template||'',subject:row.subject||'',subjects:row.subject||'',topic:row.topics||'',topics:row.topics||'',subtopic:row.subtopics||'',subtopics:row.subtopics||'',skills:row.skills||'',yearLevels,yearLevel:yearLevels,yearFrom:yearLevels[0]||'',yearTo:yearLevels[yearLevels.length-1]||yearLevels[0]||'',year:yearLevels.join(', '),difficulty:row.difficulty||'',calculator:row.calculator||'',author:row.author||'Original',date:Number(row.year)||'',questionNumber:Math.max(1,Number(row.question_number)||1),responsePercent:Number(row.response_percent)||0,response:Number(row.response_percent)||0,attemptCount:Number(row.attempt_count)||0,correctCount:Number(row.correct_count)||0,text:row.question_text||'',marks:Math.max(1,Number(row.marks)||1),reviewStatus:row.review_status||'Draft'};
+}
+async function loadAddQuestionIndexFromSupabase(){
+  if(!supabaseClient){addQuestionIndexReady=false;return false;}
+  try{
+    const columns='id,old_id,bank,type,template,option_template,subject,topics,subtopics,skills,year_levels,difficulty,calculator,author,year,question_number,response_percent,attempt_count,correct_count,question_text:data->>text,marks:data->>marks,review_status:data->>reviewStatus';
+    const {data,error}=await supabaseClient.from('questions').select(columns).order('created_at',{ascending:false});
+    if(error)throw error;
+    addQuestionIndex=(data||[]).map(addQuestionIndexItem);
+    addQuestionIndexReady=true;
+    return true;
+  }catch(error){
+    addQuestionIndexReady=false;
+    console.error('Could not load lightweight Add Question index:',error);
+    return false;
+  }
+}
+function addQuestionSource(){return addQuestionIndexReady?addQuestionIndex:questions;}
+function addQuestionAlreadyInExam(question){return examQuestions.some(item=>(question.supabaseId&&item.supabaseId===question.supabaseId)||item.id===question.id);}
+async function loadFullAddQuestions(selected){
+  const selectedItems=Array.isArray(selected)?selected:[];
+  const supabaseIds=[...new Set(selectedItems.map(item=>item.supabaseId).filter(Boolean))];
+  const rowsById=new Map();
+  if(supabaseClient&&supabaseIds.length){
+    const {data,error}=await supabaseClient.from('questions').select('id,data').in('id',supabaseIds);
+    if(error)throw error;
+    (data||[]).forEach(row=>rowsById.set(row.id,row));
+  }
+  const loaded=selectedItems.map(indexItem=>{
+    const row=rowsById.get(indexItem.supabaseId);
+    if(row?.data)return safeNormalizeQuestion({...row.data,supabaseId:row.id});
+    return questions.find(item=>(indexItem.supabaseId&&item.supabaseId===indexItem.supabaseId)||item.id===indexItem.id)||null;
+  }).filter(Boolean);
+  if(loaded.length!==selectedItems.length)throw new Error('One or more selected questions could not be loaded.');
+  loaded.forEach(question=>{const index=questions.findIndex(item=>(question.supabaseId&&item.supabaseId===question.supabaseId)||item.id===question.id);if(index>=0)questions[index]=question;else questions.push(question);});
+  return loaded;
+}
+function renderAddQuestionsLoadingState(){
+  const el=document.getElementById('addq-list');
+  const count=document.getElementById('addq-result-count');
+  if(count)count.textContent='';
+  if(!el)return;
+  el.innerHTML=`<div class="addq-loading-state" role="status" aria-live="polite"><span class="addq-loading-spinner" aria-hidden="true"></span><strong>${esc(addQuestionsLoadingTitle)}</strong></div>`;
+}
+function setAddQuestionsLoading(loading,title='Loading questions...',detail=''){
+  addQuestionsLoading=Boolean(loading);
+  addQuestionsLoadingTitle=title;
+  addQuestionsLoadingDetail=detail;
+  const view=document.getElementById('view-addq');
+  view?.classList.toggle('addq-is-loading',addQuestionsLoading);
+  view?.querySelectorAll('.bank-filter-row input,.bank-filter-row select').forEach(control=>{control.disabled=addQuestionsLoading;});
+  ['addq-select-all-btn','addq-add-selected-btn'].forEach(id=>{const button=document.getElementById(id);if(button)button.disabled=addQuestionsLoading;});
+  if(addQuestionsLoading)renderAddQuestionsLoadingState();
+}
+function applyExamSubjectToAddQuestionFilter(){
+  const examSubject=document.getElementById('exam-subject')?.value||'';
+  const filter=document.getElementById('addq-subject-filter');
+  if(!examSubject||!filter)return false;
+  const normalise=value=>typeof normalizeSubjectName==='function'?normalizeSubjectName(value):String(value||'').trim();
+  const target=normalise(examSubject);
+  const option=[...filter.options].find(item=>normalise(item.value)===target);
+  if(!option)return false;
+  const changed=filter.value!==option.value;
+  filter.value=option.value;
+  return changed;
+}
+async function openAddQuestionsView(){
+  if(addQuestionsLoading)return;
+  enforceTeacherAddQBank();
+  syncBankTabs();
+  setAddQuestionsLoading(true,'Preparing Questions');
+  const loadingStarted=performance.now();
+  try{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await loadAddQuestionIndexFromSupabase();
+  }finally{
+    const minimumVisibleMs=350,remaining=minimumVisibleMs-(performance.now()-loadingStarted);
+    if(remaining>0)await new Promise(resolve=>setTimeout(resolve,remaining));
+    setAddQuestionsLoading(false);
+    enforceTeacherAddQBank();
+    syncBankTabs();
+    renderAddQList();
+    if(applyExamSubjectToAddQuestionFilter())renderAddQList();
+  }
+}
 function renderAddQList(){
+  if(addQuestionsLoading){renderAddQuestionsLoadingState();return;}
   enforceTeacherAddQBank();
   const search=(document.getElementById('addq-search')||{value:''}).value.toLowerCase();
   const tf=document.getElementById('addq-type-filter')?.value||'';
-  const bankQuestions=questions.filter(q=>(q.bank||'private')===activeAddQBankFilter);
+  const sourceQuestions=addQuestionSource();
+  const bankQuestions=isQuestionBankEnabled(activeAddQBankFilter)?sourceQuestions.filter(q=>(q.bank||'private')===activeAddQBankFilter):[];
   const filters=syncAddQMetadataFilters(bankQuestions);
   const available=bankQuestions.filter(q=>{
-    if(examQuestions.find(e=>e.id===q.id))return false;
+    if(addQuestionAlreadyInExam(q))return false;
     if(tf&&q.type!==tf)return false;
     if(!bankFieldMatches(q,'subject',filters.subject))return false;
     if(!bankFieldMatches(q,'topic',filters.topic))return false;
@@ -70,19 +160,19 @@ function renderAddQList(){
   const count=document.getElementById('addq-result-count');
   if(count)count.textContent=`${available.length} question${available.length===1?'':'s'} available`;
   if(!available.length){
-    el.innerHTML=`<div class="empty-state"><i class="ti ti-check"></i><div>${bankQuestions.length&&bankQuestions.length===bankQuestions.filter(q=>examQuestions.find(e=>e.id===q.id)).length?'All '+bankLabel(activeAddQBankFilter)+' questions already in exam':'No questions match in '+bankLabel(activeAddQBankFilter)}</div></div>`;
+    el.innerHTML=`<div class="empty-state"><i class="ti ti-check"></i><div>${bankQuestions.length&&bankQuestions.length===bankQuestions.filter(addQuestionAlreadyInExam).length?'All '+bankLabel(activeAddQBankFilter)+' questions already in exam':'No questions match in '+bankLabel(activeAddQBankFilter)}</div></div>`;
     return;
   }
-  el.innerHTML=available.map(q=>{const marks=Number(q.marks)||1;return`<div class="addq-card"><input type="checkbox" id="qa-${q.id}" class="addq-checkbox"><label for="qa-${q.id}" class="addq-card-content"><div class="q-card-collapsed-text">${questionCollapsedSkillsPreview(q)||esc(questionCollapsedPreview(q))}</div><div class="addq-card-meta"><span class="tag ${typeClass(q.type)}">${typeShort(q.type)}</span><span>${esc(q.date||'')}</span><span>${esc(q.author||'Original')}</span><span>(${marks} mark${marks===1?'':'s'})</span></div></label></div>`;}).join('');
+  el.innerHTML=available.map(q=>{const marks=Number(q.marks)||1,questionNumber=Math.max(1,parseInt(q.questionNumber,10)||1);return`<div class="addq-card"><input type="checkbox" id="qa-${q.id}" class="addq-checkbox"><label for="qa-${q.id}" class="addq-card-content"><div class="q-card-collapsed-text">${questionCollapsedSkillsPreview(q)||esc(questionCollapsedPreview(q))}</div><div class="addq-card-meta"><span class="tag ${typeClass(q.type)}">${typeShort(q.type)}</span><span>${esc(q.date||'')}</span><span>${esc(q.author||'Original')}</span><span>Q${esc(questionNumber)}</span><span>(${marks} mark${marks===1?'':'s'})</span></div></label></div>`;}).join('');
 }function coverPlainTextToHtml(text){return plainTextPasteHtml(text||'');}
 function coverFieldHtml(key){return coverPage[key+'Html']||coverPlainTextToHtml(coverPage[key]||'');}
 function coverEditorField(id,key,label,placeholder){return `<div class="cover-page-field"><label>${label}</label><div class="cover-page-editor-wrap"><div id="${id}" class="cover-page-editor editable-text" contenteditable="true" data-placeholder="${placeholder}" onfocus="setActiveEditor('${id}')" oninput="syncCoverPage()" onblur="syncCoverPage()" onkeyup="syncCoverPage();updateQuestionToolbar()" onmouseup="updateQuestionToolbar()">${coverFieldHtml(key)}</div></div></div>`;}
 function syncCoverPage(){
-  const read=(id,key)=>{const el=document.getElementById(id),html=storedHtmlFrom(el);coverPage[key+'Html']=html;coverPage[key]=plainTextFromHtml(html)||'';};
+  const read=(id,key)=>{const el=document.getElementById(id);if(!el)return;const html=storedHtmlFrom(el);coverPage[key+'Html']=html;coverPage[key]=plainTextFromHtml(html)||'';};
   read('cover-approved-materials','approvedMaterials');
   read('cover-materials-supplied','materialsSupplied');
   read('cover-instructions','instructions');
-  saveState();
+  if(typeof autoSaveExamTextEdits==='function')autoSaveExamTextEdits();else saveState();
 }
 function toggleCoverPage(){coverPageExpanded=!coverPageExpanded;renderExam();}
 

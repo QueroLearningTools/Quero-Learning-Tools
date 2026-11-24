@@ -4,32 +4,41 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quero Learning Tools</title>
-<link rel="icon" type="image/png" href="app-logo.png">
+<link rel="icon" type="image/png" href="assets/images/app-logo.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/layout.css">
-<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/components.css?v=20261031-login-welcome-1">
 <link rel="stylesheet" href="css/question-render.css">
-<link rel="stylesheet" href="css/exam-builder.css">
-<link rel="stylesheet" href="css/extractor.css">
-<link rel="stylesheet" href="css/curriculum.css">
+<link rel="stylesheet" href="css/exam-builder.css?v=20261119-inline-action-loading-1">
+<link rel="stylesheet" href="css/extractor.css?v=20261031-working-area-menu-1">
+<link rel="stylesheet" href="css/curriculum.css?v=20261025-curriculum-autosave-1">
 <link rel="stylesheet" href="css/school-manager.css">
-<link rel="stylesheet" href="css/home.css">
-<link rel="stylesheet" href="css/question-bank.css">
-<link rel="stylesheet" href="css/add-questions.css">
-<link rel="stylesheet" href="css/classroom.css">
-<link rel="stylesheet" href="css/study-mode.css">
+<link rel="stylesheet" href="css/home.css?v=20261110-archive-loading-1">
+<link rel="stylesheet" href="css/question-bank.css?v=20261025-question-bank-availability-1">
+<link rel="stylesheet" href="css/add-questions.css?v=20261114-addq-loading-fix-1">
+<link rel="stylesheet" href="css/classroom.css?v=20261107-practice-summary-ellipsis-1">
+<link rel="stylesheet" href="css/study-mode.css?v=20261124-saer-check-button-2">
 <link rel="stylesheet" href="css/live-quiz.css?v=20261018-podium-award-confetti-15">
+<link rel="stylesheet" href="css/latex-times.css?v=20261114-practice-study-math-1">
 </head>
 <body>
+<div id="auth-loading-screen" class="auth-loading-screen" role="status" aria-live="polite">
+  <img class="auth-loading-logo" src="assets/images/app-logo.png" alt="Quero Learning Tools logo">
+  <strong>Welcome to Quero Learning Tools</strong>
+  <span class="auth-loading-message">Loading your workspace...</span>
+  <span class="auth-loading-spinner" aria-hidden="true"></span>
+</div>
 <div id="login-screen" class="login-screen" style="display:none">
   <div class="login-card">
-    <img class="login-logo" src="app-logo.png" alt="Quero Learning Tools logo">
+    <img class="login-logo" src="assets/images/app-logo.png" alt="Quero Learning Tools logo">
     <div id="login-form">
       <div class="auth-form-title">Login</div>
       <div class="login-field"><input id="login-email" type="text" autocomplete="username" placeholder="Username or Email"><i class="ti ti-user-filled"></i></div>
@@ -98,7 +107,7 @@
           <label>Visibility<select id="new-bank-visibility"><option value="private">Private</option><option value="school">School</option><option value="shared">Shared</option><option value="public">Public</option></select></label>
           <button class="btn primary" type="button" onclick="createCustomBank()"><i class="ti ti-plus"></i>Create Bank</button>
         </div>
-        <div class="bank-manager-note">Built-in banks stay fixed. Custom banks can be renamed or removed while empty.</div>
+        <div class="bank-manager-note">Off banks stay saved but cannot be used in quizzes, Study Mode, practice, assignments, or papers. Administrators can still manage and re-enable them.</div>
         <div class="bank-manager-list" id="bank-manager-list"></div>
       </div>
       <div class="filter-row bank-filter-row">
@@ -170,8 +179,8 @@
         <div><div style="font-size:15px;font-weight:700">Curriculum Manager</div><div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px">Manage Topic -> Subtopic -> Skill links for Create Question and Question Extractor</div></div>
       </div>
       <div class="curriculum-savebar">
-        <div class="curriculum-note">Edit skills here, then save. Questions using deleted or changed skills will show a warning in the Question Bank.</div>
-        <button type="button" class="btn btn-primary" id="curriculum-save-btn" onclick="saveCurriculumToSupabase()"><i class="ti ti-cloud-upload"></i>Save hierarchy</button>
+        <div class="curriculum-note">Changes save automatically. Questions using deleted or changed skills will show a warning in the Question Bank.</div>
+        <div class="curriculum-save-status" id="curriculum-save-status" data-state="saved" role="status" aria-live="polite"><i class="ti ti-cloud-check"></i><span>Saved</span></div>
       </div>
       <div class="curriculum-learning-bar" id="curriculum-learning-tabs"></div>
       <div class="curriculum-manager">
@@ -303,21 +312,22 @@
       <div class="topbar">
         <div style="flex:1;min-width:0">
           <input id="exam-title" value="Untitled Exam" style="font-size:15px;font-weight:700;border:none;outline:none;background:transparent;color:var(--color-text-primary);width:100%;max-width:300px;font-family:Arial,sans-serif"/>
-          <div style="font-size:12px;color:var(--color-text-secondary);margin-top:1px" id="exam-summary-line">0 questions - 0 marks</div></div><div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+        </div><div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
           <button class="btn btn-sm exam-action exam-action-questions" onclick="showView('addq')"><i class="ti ti-plus"></i>Questions</button>
           <button class="btn btn-sm exam-action exam-action-shuffle" onclick="shuffleExamOptions()"><i class="ti ti-arrows-shuffle"></i>Shuffle</button>
-          <button class="btn btn-sm exam-action exam-action-save" onclick="savePaper()"><i class="ti ti-device-floppy"></i>Save</button>
-          <button class="btn btn-sm exam-action exam-action-export" onclick="exportExam()" id="export-btn"><i class="ti ti-download"></i>Export</button>
-          <button class="btn btn-sm exam-action exam-action-answers" onclick="exportAnswers()" id="export-answers-btn"><i class="ti ti-file-check"></i>Answers</button>
+          <button class="btn btn-sm exam-action exam-action-save" onclick="savePaper()" id="save-paper-btn"><i class="ti ti-device-floppy"></i>Save</button>
+          <button class="btn btn-sm exam-action exam-action-export" onclick="exportExamPdf(false)" id="export-btn"><i class="ti ti-download"></i>Export</button>
+          <button class="btn btn-sm exam-action exam-action-answers" onclick="exportExamPdf(true)" id="export-answers-btn"><i class="ti ti-file-check"></i>Answers</button>
+          <button class="btn btn-sm exam-action exam-action-print" onclick="printExamPdf()" id="export-pdf-btn"><i class="ti ti-printer"></i>Print</button>
         </div>
       </div>
       <div class="exam-setup-panel" id="exam-setup-panel">
         <div class="exam-setup-field"><label>Subject</label><select id="exam-subject"><option>F-6 Mathematics</option><option>F-6 Science</option><option>7-10A Mathematics</option><option>7-10A Science</option><option>Foundation Mathematics</option><option>General Mathematics</option><option>Mathematical Methods</option><option>Specialist Mathematics</option><option>Physics</option><option>Chemistry</option><option>Biology</option><option>Psychology</option></select></div>
         <div class="exam-setup-field"><label>Examination</label><select id="exam-number"><option>Examination</option><option>Examination 1</option><option>Examination 2</option></select></div>
         <div class="exam-setup-field"><label>Date</label><input type="date" id="exam-date"></div>
-        <div class="exam-setup-field"><label>Time</label><input type="time" id="exam-time" value="14:00"></div>
-        <div class="exam-setup-field"><label>Reading time</label><div class="duration-step-control"><input type="text" id="exam-reading-time" value="15 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustReadingTime(5)" title="Increase reading time by 5 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustReadingTime(-5)" title="Decrease reading time by 5 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
-        <div class="exam-setup-field"><label>Writing time</label><div class="duration-step-control"><input type="text" id="exam-writing-time" value="90 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustWritingTime(10)" title="Increase writing time by 10 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustWritingTime(-10)" title="Decrease writing time by 10 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
+        <div class="exam-setup-field"><label>Start Time</label><input type="time" id="exam-time" value="14:00"></div>
+        <div class="exam-setup-field"><label>Reading Time</label><div class="duration-step-control"><input type="text" id="exam-reading-time" value="15 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustReadingTime(5)" title="Increase reading time by 5 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustReadingTime(-5)" title="Decrease reading time by 5 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
+        <div class="exam-setup-field"><label>Writing Time</label><div class="duration-step-control"><input type="text" id="exam-writing-time" value="90 mins"><span class="duration-step-buttons"><button type="button" onclick="adjustWritingTime(10)" title="Increase writing time by 10 minutes"><i class="ti ti-chevron-up"></i></button><button type="button" onclick="adjustWritingTime(-10)" title="Decrease writing time by 10 minutes"><i class="ti ti-chevron-down"></i></button></span></div></div>
       </div>
       <div class="rich-editor-toolbar" id="builder-toolbar"><button type="button" class="toolbar-btn" data-q-cmd="bold" onmousedown="event.preventDefault();formatQuestionText('bold')" title="Bold"><b>B</b></button><button type="button" class="toolbar-btn" data-q-cmd="italic" onmousedown="event.preventDefault();formatQuestionText('italic')" title="Italic"><i>I</i></button><button type="button" class="toolbar-btn" data-q-cmd="underline" onmousedown="event.preventDefault();formatQuestionText('underline')" title="Underline"><u>U</u></button><button type="button" class="toolbar-btn" data-q-cmd="subscript" onmousedown="event.preventDefault();formatQuestionText('subscript')" title="Subscript"><i class="ti ti-subscript"></i></button><button type="button" class="toolbar-btn" data-q-cmd="superscript" onmousedown="event.preventDefault();formatQuestionText('superscript')" title="Superscript"><i class="ti ti-superscript"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" data-q-cmd="insertUnorderedList" onmousedown="event.preventDefault();formatQuestionText('insertUnorderedList')" title="Bullet list"><i class="ti ti-list"></i></button><span class="toolbar-menu-wrap"><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();toggleNumberingMenu(undefined,'builder-numbering-menu')" title="Numbering"><i class="ti ti-list-numbers"></i></button><span class="toolbar-menu" id="builder-numbering-menu"><button type="button" onmousedown="event.preventDefault();applyNumberedList('decimal')">1, 2, 3</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-alpha')">a, b, c</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-alpha')">A, B, C</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('lower-roman')">i, ii, iii</button><button type="button" onmousedown="event.preventDefault();applyNumberedList('upper-roman')">I, II, III</button></span></span><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('outdent')" title="Decrease indent"><i class="ti ti-indent-decrease"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('indent')" title="Increase indent"><i class="ti ti-indent-increase"></i></button><div class="toolbar-sep"></div><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyLeft')" title="Left"><i class="ti ti-align-left"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyCenter')" title="Centre"><i class="ti ti-align-center"></i></button><button type="button" class="toolbar-btn" onmousedown="event.preventDefault();formatQuestionText('justifyRight')" title="Right"><i class="ti ti-align-right"></i></button></div>
       <div id="exam-sections"></div>
@@ -329,7 +339,7 @@
       <div class="addq-content">
         <div class="addq-page-head">
           <h1>Add Questions to Exam</h1>
-          <button class="btn btn-sm" onclick="showView('builder')"><i class="ti ti-arrow-left"></i>Back to exam</button>
+          <button type="button" class="btn" onclick="showView('builder')"><i class="ti ti-arrow-left"></i>Back to exam</button>
         </div>
         <div class="bank-tabs" id="addq-bank-tabs"></div>
         <div class="filter-row bank-filter-row">
@@ -351,8 +361,8 @@
       </div>
       <div class="addq-actions">
         <button class="btn" onclick="showView('builder')">Cancel</button>
-        <button class="btn" onclick="selectAllAddQQuestions()"><i class="ti ti-list-check"></i>Select all</button>
-        <button class="btn btn-primary" onclick="confirmAddToExam()"><i class="ti ti-check"></i>Add selected</button>
+        <button class="btn" id="addq-select-all-btn" onclick="selectAllAddQQuestions()"><i class="ti ti-list-check"></i>Select all</button>
+        <button class="btn btn-primary" id="addq-add-selected-btn" onclick="confirmAddToExam()"><i class="ti ti-check"></i>Add selected</button>
       </div>
     </div>
 
@@ -382,20 +392,20 @@
 
 <script src="js/supabase-client.js"></script>
 <script src="js/classroom-supabase.js"></script>
-<script src="js/state.js"></script>
-<script src="js/question-bank.js"></script>
-<script src="js/create-question.js"></script>
-<script src="js/exam-builder.js"></script>
+<script src="js/state.js?v=20261115-exam-subject-required-1"></script>
+<script src="js/question-bank.js?v=20261114-addq-loading-fix-1"></script>
+<script src="js/create-question.js?v=20261118-saer-answer-latex-1"></script>
+<script src="js/exam-builder.js?v=20261119-unique-paper-titles-1"></script>
 <script src="js/school-manager.js"></script>
-<script src="js/classroom.js"></script>
-<script src="js/home.js"></script>
-<script src="js/study-mode.js?v=github-learn-working-20260914"></script>
-<script src="js/quero-practice.js"></script>
-<script src="js/live-quiz.js?v=20261018-podium-award-confetti-19"></script>
-<script src="js/docx-export.js"></script>
-<script src="js/question-extractor.js"></script>
-<script src="js/curriculum-manager.js"></script>
-<script src="js/app.js"></script>
+<script src="js/classroom.js?v=20261107-practice-hierarchy-availability-1"></script>
+<script src="js/home.js?v=20261110-archive-loading-1"></script>
+<script src="js/study-mode.js?v=20261124-saer-check-button-2"></script>
+<script src="js/quero-practice.js?v=20261114-practice-study-math-1"></script>
+<script src="js/live-quiz.js?v=20261102-question-bank-equations-1"></script>
+<script src="js/docx-export.js?v=20261110-paper-metadata-first-2"></script>
+<script src="js/question-extractor.js?v=20261031-working-area-menu-1"></script>
+<script src="js/curriculum-manager.js?v=20261114-section-maximum-marks-1"></script>
+<script src="js/app.js?v=20261114-addq-loading-route-1"></script>
 </body>
 </html>
 

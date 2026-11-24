@@ -2,6 +2,10 @@
 (function(){
   const LETTERS = ['A','B','C','D'];
   const PRACTICE_DIAGRAM_IMAGE_SCALE = 0.35;
+  const PRACTICE_LOADING_MINIMUM_MS = 450;
+  let practiceLoadToken = 0;
+  const practiceQuestionCache = new Map();
+  const preloadedPracticeImages = new Set();
   const practiceState = {
     open:false,
     submitted:false,
@@ -74,6 +78,24 @@
     return true;
   }
 
+  function practiceQuestionCacheKey(task,cls){
+    return JSON.stringify({
+      classId:cls?.id||cls?.supabaseId||'',taskId:task?.id||'',subject:cls?.subject||'',yearLevel:cls?.yearLevel||'',
+      topic:task?.topic||'',subtopic:task?.subtopic||'',skill:task?.skill||'',questionCount:Math.max(1,Number(task?.questionCount)||10)
+    });
+  }
+
+  function practiceQuestionIndexItem(row,position){
+    const yearLevels=Array.isArray(row.year_levels)?row.year_levels:values(row.year_levels,'yearLevels');
+    return{
+      id:Math.max(1,parseInt(row.old_id,10)||1000000000+position),supabaseId:row.id,isQuestionIndex:true,
+      bank:row.bank||'private',type:row.type||'',template:row.template||'',optionTemplate:row.option_template||'',
+      subject:row.subject||'',subjects:row.subject||'',topic:row.topics||'',topics:row.topics||'',subtopic:row.subtopics||'',subtopics:row.subtopics||'',
+      skills:row.skills||'',yearLevels,yearLevel:yearLevels,yearFrom:yearLevels[0]||'',yearTo:yearLevels[yearLevels.length-1]||yearLevels[0]||'',
+      questionNumber:Math.max(1,Number(row.question_number)||1)
+    };
+  }
+
   function correctIndex(q){
     const raw = q.correctIndex ?? q.correct ?? q.answerIndex ?? q.answer;
     if(typeof raw === 'number') return Math.max(0,Math.min(3,raw));
@@ -106,18 +128,18 @@
       blocks.forEach(block=>{
         html += imageHtml(block.imageData || block.diagramData || block.data || '', block.imageName || block.diagramName || block.name || '');
         const after = textHtml(block.afterTextHtml, block.afterText);
-        if(after) html += `<div class="quero-practice-question-text">${after}</div>`;
+        if(after) html += `<div class="quero-practice-question-text study-question-text">${after}</div>`;
       });
       return html;
     }
     const first = legacyImage(item);
     html += imageHtml(first.data,first.name);
     const after = textHtml(item.afterTextHtml,item.afterText);
-    if(after) html += `<div class="quero-practice-question-text">${after}</div>`;
+    if(after) html += `<div class="quero-practice-question-text study-question-text">${after}</div>`;
     const second = legacyImage(item,'2');
     html += imageHtml(second.data,second.name);
     const after2 = textHtml(item.afterText2Html,item.afterText2);
-    if(after2) html += `<div class="quero-practice-question-text">${after2}</div>`;
+    if(after2) html += `<div class="quero-practice-question-text study-question-text">${after2}</div>`;
     return html;
   }
 
@@ -166,7 +188,7 @@
     return items.reduce((sum,item)=>sum + (item.questionCount || 1),0);
   }
 
-  function flattenQuestions(task,cls){
+  function flattenQuestions(task,cls,sourceOverride){
     const filters = {
       subject: cls?.subject || '',
       yearLevel: cls?.yearLevel || '',
@@ -174,7 +196,8 @@
       subtopic: task?.subtopic || '',
       skill: task?.skill || ''
     };
-    const source = (typeof questions !== 'undefined' && Array.isArray(questions)) ? questions : [];
+    const allSource = Array.isArray(sourceOverride)?sourceOverride:((typeof questions !== 'undefined' && Array.isArray(questions)) ? questions : []);
+    const source = typeof usableQuestions === 'function' ? usableQuestions(allSource) : allSource;
     const limit = Math.max(1,Number(task?.questionCount) || 10);
     const out = [];
     source.filter(q=>questionMatches(q,filters)).sort((a,b)=>(Number(a.questionNumber)||0)-(Number(b.questionNumber)||0)).forEach((q,index)=>{
@@ -202,6 +225,45 @@
       }
     });
     return out;
+  }
+
+  async function loadPracticeAssignmentQuestions(task,cls){
+    const cacheKey=practiceQuestionCacheKey(task,cls);
+    if(practiceQuestionCache.has(cacheKey))return practiceQuestionCache.get(cacheKey);
+    const localSource=(typeof questions!=='undefined'&&Array.isArray(questions))?questions:[];
+    if(typeof supabaseClient==='undefined'||!supabaseClient){
+      const localPages=flattenQuestions(task,cls,localSource);
+      practiceQuestionCache.set(cacheKey,localPages);
+      return localPages;
+    }
+    const filters={subject:cls?.subject||'',yearLevel:cls?.yearLevel||'',topic:task?.topic||'',subtopic:task?.subtopic||'',skill:task?.skill||''};
+    const columns='id,old_id,bank,type,template,option_template,subject,topics,subtopics,skills,year_levels,question_number,created_at',metadataRows=[];
+    for(let from=0;;from+=1000){
+      const {data,error}=await supabaseClient.from('questions').select(columns).in('type',['mc','tf']).order('question_number',{ascending:true}).order('created_at',{ascending:true}).range(from,from+999);
+      if(error)throw error;
+      metadataRows.push(...(data||[]));
+      if(!data||data.length<1000)break;
+    }
+    const matching=metadataRows.map(practiceQuestionIndexItem).filter(item=>{
+      if(typeof isQuestionBankEnabled==='function'&&!isQuestionBankEnabled(item.bank))return false;
+      return questionMatches(item,filters);
+    });
+    const limit=Math.max(1,Number(task?.questionCount)||10),candidateLimit=Math.max(limit*3,limit+8),candidates=matching.slice(0,candidateLimit);
+    if(!candidates.length){practiceQuestionCache.set(cacheKey,[]);return[];}
+    const candidateIds=candidates.map(item=>item.supabaseId).filter(Boolean);
+    const {data:fullRows,error:fullError}=await supabaseClient.from('questions').select('id,data').in('id',candidateIds);
+    if(fullError)throw fullError;
+    const rowsById=new Map((fullRows||[]).map(row=>[row.id,row]));
+    const loaded=candidates.map(item=>{
+      const row=rowsById.get(item.supabaseId);
+      if(!row?.data)return null;
+      const question={...row.data,supabaseId:row.id};
+      return typeof safeNormalizeQuestion==='function'?safeNormalizeQuestion(question):question;
+    }).filter(Boolean);
+    if(!loaded.length)throw new Error('Matching Quero Practice questions could not be loaded.');
+    const pages=flattenQuestions(task,cls,loaded);
+    practiceQuestionCache.set(cacheKey,pages);
+    return pages;
   }
 
   function answerItems(){
@@ -238,7 +300,7 @@
         : '';
       return `<button type="button" class="quero-practice-option ${selected ? 'selected' : ''} ${isCorrect ? 'right' : ''} ${isWrong ? 'wrong' : ''} ${showCorrectAnswer ? 'correct-answer' : ''}" ${submitted ? 'disabled' : ''} onclick="selectQueroPracticeAnswer('${jsEsc(item.id)}',${option.originalIndex})">
         <span class="quero-practice-option-letter">${option.displayLetter}.</span>
-        <span class="quero-practice-option-body">${optionBody(option)}</span>
+        <span class="quero-practice-option-body study-option-body">${optionBody(option)}</span>
         ${feedback}
       </button>`;
     }).join('')}
@@ -257,7 +319,7 @@
 
   function renderQuestionBody(item){
     const q = item.q;
-    return `<div class="quero-practice-question-text">${textHtml(q.questionHtml || q.textHtml, q.question || q.text || '') || questionText(q)}</div>
+    return `<div class="quero-practice-question-text study-question-text">${textHtml(q.questionHtml || q.textHtml, q.question || q.text || '') || questionText(q)}</div>
       ${contentHtml(q)}
       ${renderOptions(item)}`;
   }
@@ -267,7 +329,7 @@
     return `<article class="quero-practice-question-card quero-practice-multiple-card">
       <div class="quero-practice-shared">
         <div class="quero-practice-multiple-instruction">${esc(multipleInstruction(parent,page.parentStart || page.number,page.items.length))}</div>
-        <div class="quero-practice-question-text">${questionText(parent)}</div>
+        <div class="quero-practice-question-text study-question-text">${questionText(parent)}</div>
         ${contentHtml(parent)}
       </div>
       <div class="quero-practice-internal-stack">
@@ -400,30 +462,130 @@
     return root;
   }
 
-  window.openQueroPracticeAssignment = async function openQueroPracticeAssignment({ classIndex, termKey, taskId, cls, task, studentKey, studentName }){
-    Object.assign(practiceState,{
-      open:true,
-      submitted:false,
-      classIndex,
-      termKey,
-      taskId,
-      cls,
-      task,
-      studentKey: studentKey || '',
-      studentName: studentName || '',
-      questions: flattenQuestions(task,cls),
-      currentIndex:0,
-      zoom:100,
-      startedAt:Date.now(),
-      answers:{},
-      optionOrders:{},
-      reviewMode:false,
-      reviewAttempt:null
+  function practiceLoadingCardHtml(){
+    return `<section class="quero-practice-loading-card">
+      <span class="quero-practice-loading-spinner" aria-hidden="true"></span>
+      <h2>Preparing Quero Practice</h2>
+      <p>Loading your questions and progress...</p>
+      <button type="button" onclick="closeQueroPractice()">Cancel</button>
+    </section>`;
+  }
+
+  function practiceLoadingFrameHtml(){
+    return `<main class="quero-practice-loading-main">${practiceLoadingCardHtml()}</main>`;
+  }
+
+  function renderPracticeLoading(root){
+    root.setAttribute('aria-busy','true');
+    root.innerHTML = `<section class="quero-practice-loading-screen" role="status" aria-live="polite" aria-label="Preparing Quero Practice task">
+      ${practiceLoadingFrameHtml()}
+    </section>`;
+  }
+
+  function showPracticeReadinessOverlay(root){
+    const overlay = document.createElement('div');
+    overlay.className = 'quero-practice-ready-overlay';
+    overlay.setAttribute('role','status');
+    overlay.setAttribute('aria-live','polite');
+    overlay.setAttribute('aria-label','Finishing Quero Practice question');
+    overlay.innerHTML = practiceLoadingFrameHtml();
+    root.appendChild(overlay);
+    return overlay;
+  }
+
+  function waitForPracticeImage(img){
+    return new Promise(resolve=>{
+      const finish = ()=>{
+        if(typeof img.decode === 'function') img.decode().catch(()=>{}).finally(resolve);
+        else resolve();
+      };
+      if(img.complete){ finish(); return; }
+      img.addEventListener('load',finish,{ once:true });
+      img.addEventListener('error',resolve,{ once:true });
     });
+  }
+
+  async function waitForPracticeReady(root,timeoutMs=8000){
+    const images = [...root.querySelectorAll('.quero-practice-screen img')];
+    const assets = images.map(waitForPracticeImage);
+    if(document.fonts?.ready) assets.push(Promise.resolve(document.fonts.ready).catch(()=>{}));
+    const settled = Promise.allSettled(assets).then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await Promise.race([settled,new Promise(resolve=>setTimeout(resolve,timeoutMs))]);
+  }
+
+  function preloadPracticePageImages(page){
+    if(!page)return;
+    const sources=new Set(),seen=new Set();
+    const collect=value=>{
+      if(value==null)return;
+      if(typeof value==='string'){
+        const trimmed=value.trim();
+        if(/^(?:data:image\/|blob:|https?:\/\/)/i.test(trimmed))sources.add(trimmed);
+        for(const match of trimmed.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi))sources.add(match[1]);
+        return;
+      }
+      if(typeof value!=='object'||seen.has(value))return;
+      seen.add(value);
+      if(Array.isArray(value))value.forEach(collect);else Object.values(value).forEach(collect);
+    };
+    collect(page);
+    sources.forEach(src=>{
+      if(preloadedPracticeImages.has(src))return;
+      preloadedPracticeImages.add(src);
+      const image=new Image();
+      image.src=src;
+      if(typeof image.decode==='function')image.decode().catch(()=>{});
+    });
+  }
+
+  window.openQueroPracticeAssignment = async function openQueroPracticeAssignment({ classIndex, termKey, taskId, cls, task, studentKey, studentName }){
+    const loadToken = ++practiceLoadToken;
     const root = ensureRoot();
     root.hidden = false;
     document.body.classList.add('quero-practice-active');
-    render();
+    renderPracticeLoading(root);
+    const loadingStartedAt = Date.now();
+    try{
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+      const questions = await loadPracticeAssignmentQuestions(task,cls);
+      const remainingLoadingTime = Math.max(0,PRACTICE_LOADING_MINIMUM_MS-(Date.now()-loadingStartedAt));
+      if(remainingLoadingTime) await new Promise(resolve=>setTimeout(resolve,remainingLoadingTime));
+      if(loadToken !== practiceLoadToken) return;
+      Object.assign(practiceState,{
+        open:true,
+        submitted:false,
+        classIndex,
+        termKey,
+        taskId,
+        cls,
+        task,
+        studentKey: studentKey || '',
+        studentName: studentName || '',
+        questions,
+        currentIndex:0,
+        zoom:100,
+        startedAt:Date.now(),
+        answers:{},
+        optionOrders:{},
+        reviewMode:false,
+        reviewAttempt:null
+      });
+      render();
+      const readinessOverlay = showPracticeReadinessOverlay(root);
+      await waitForPracticeReady(root);
+      if(loadToken !== practiceLoadToken) return;
+      readinessOverlay.remove();
+      root.removeAttribute('aria-busy');
+      preloadPracticePageImages(practiceState.questions[1]);
+    }catch(err){
+      if(loadToken !== practiceLoadToken) return;
+      root.removeAttribute('aria-busy');
+      root.hidden = true;
+      root.innerHTML = '';
+      document.body.classList.remove('quero-practice-active');
+      console.warn('Could not prepare Quero Practice task',err);
+      if(typeof showToast === 'function') showToast('Could not load this Quero Practice task. Please try again.',true);
+    }
   };
 
   window.toggleQueroPracticeFullscreen = async function toggleQueroPracticeFullscreen(){
@@ -461,6 +623,7 @@
     if(!practiceState.submitted && !pageHasAllAnswers(current)) return;
     practiceState.currentIndex = Math.min(Math.max(0,practiceState.questions.length - 1),practiceState.currentIndex + 1);
     render();
+    preloadPracticePageImages(practiceState.questions[practiceState.currentIndex + 1]);
   };
 
   window.submitQueroPractice = async function submitQueroPractice(){
@@ -530,6 +693,7 @@
   };
 
   window.closeQueroPractice = async function closeQueroPractice(){
+    practiceLoadToken++;
     const root = document.getElementById('quero-practice-root');
     if(document.fullscreenElement && root?.contains(document.fullscreenElement)){
       try{ await document.exitFullscreen(); }catch(err){}

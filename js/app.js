@@ -23,12 +23,12 @@ function showView(v){
   ['home','classroom-archive','bank','deleted','extractor','curriculum','schools','create','builder','papers','admin-users'].forEach(x=>{const n=document.getElementById('nav-'+x);if(n)n.classList.toggle('active',x===v);});
   if(v==='home'){
     renderHomePage();
-    if(typeof window.loadHomeClassroomsFromSupabase === 'function'){
+    if(protectedStudent && typeof window.loadHomeClassroomsFromSupabase === 'function'){
       setTimeout(()=>window.loadHomeClassroomsFromSupabase({ preserveScroll:true }), 0);
     }
   }
-  if(v==='classroom-archive')renderClassroomArchivePage();if(v==='builder')renderExam();if(v==='papers')renderPapers();if(v==='admin-users')loadAdminUsers();if(v==='schools')renderSchoolManager();if(v==='deleted')renderDeletedQuestions();if(v==='extractor')renderExtractorPreview();if(v==='curriculum')renderCurriculumManager();
-  if(v==='addq'){enforceTeacherAddQBank();renderAddQList();document.getElementById('nav-builder').classList.add('active');}
+  if(v==='classroom-archive')renderClassroomArchivePage();if(v==='builder')renderExam();if(v==='papers'){if(typeof refreshExamPapersView==='function')refreshExamPapersView();else renderPapers();}if(v==='admin-users')loadAdminUsers();if(v==='schools')renderSchoolManager();if(v==='deleted')renderDeletedQuestions();if(v==='extractor')renderExtractorPreview();if(v==='curriculum')renderCurriculumManager();
+  if(v==='addq'){void openAddQuestionsView();document.getElementById('nav-builder').classList.add('active');}
   if(v==='create'&&!editingId)resetForm();
   if(v==='create')setTimeout(renderSimilarityChecker,0);
   if(a)setTimeout(()=>renderAllTextBoxKatex(a),0);
@@ -66,10 +66,9 @@ function bankUniqueValues(items,key){
   if(key==='year'){const order=['F','2','3','4','5','6','7','8','9','10','10A','11 VCE','12 VCE'];return unique.sort((a,b)=>order.indexOf(a)-order.indexOf(b));}
   return unique.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
 }
-function bankSubjectFilterValues(items,prioritizeClassrooms=false){
+function bankSubjectFilterValues(items){
   const values=[...new Set(examSubjectValues().map(normalizeSubjectName).filter(Boolean))];
-  const sorted=values.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
-  return prioritizeClassrooms&&typeof window.orderSubjectsByHomeClassrooms==='function'?window.orderSubjectsByHomeClassrooms(sorted):sorted;
+  return values.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
 }
 function bankTopicFilterValues(){
   return curriculumTopics().filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));

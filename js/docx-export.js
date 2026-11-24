@@ -56,6 +56,7 @@ async function docxRegisterImage(ctx,data,name,maxWidth=520,maxHeight=320){
 function docxImageRun(image,equation=false,align='center',layout='anchor'){
   const cx=image.width*9525,cy=image.height*9525,
     graphic=`<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="${X(image.name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${image.relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>`;
+  if(equation&&layout==='through')return`<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="0"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="character"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapThrough wrapText="bothSides"><wp:wrapPolygon edited="0"><wp:start x="0" y="0"/><wp:lineTo x="0" y="21600"/><wp:lineTo x="21600" y="21600"/><wp:lineTo x="21600" y="0"/><wp:lineTo x="0" y="0"/></wp:wrapPolygon></wp:wrapThrough><wp:docPr id="${image.docPr}" name="${X(image.name)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>${graphic}</wp:anchor></w:drawing></w:r>`;
   if(equation&&layout==='square')return`<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="0"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="${image.docPr}" name="${X(image.name)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>${graphic}</wp:anchor></w:drawing></w:r>`;
   if(equation&&layout==='front')return`<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="${image.docPr}" name="${X(image.name)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>${graphic}</wp:anchor></w:drawing></w:r>`;
   if(equation||layout==='inline')return`<w:r>${equation?'<w:rPr><w:position w:val="-2"/></w:rPr>':''}<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${image.docPr}" name="${X(image.name)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>${graphic}</wp:inline></w:drawing></w:r>`;
@@ -78,10 +79,93 @@ async function docxCoverImageParagraph(ctx,data,name,width=650,maxHeight=0,befor
 function docxInlineCss(source,clone){if(source.nodeType!==1||clone.nodeType!==1)return;const cs=getComputedStyle(source),props=['display','position','font-family','font-size','font-style','font-weight','line-height','color','background-color','vertical-align','text-align','white-space','letter-spacing','word-spacing','margin','padding','border','border-top','border-right','border-bottom','border-left','border-radius','box-sizing','width','height','min-width','min-height','top','right','bottom','left','transform','transform-origin'];clone.setAttribute('style',props.map(p=>`${p}:${cs.getPropertyValue(p)}`).join(';'));[...source.children].forEach((child,i)=>docxInlineCss(child,clone.children[i]));}
 async function waitForMathJax(){for(let i=0;i<100;i++){if(window.MathJax?.startup?.promise&&window.MathJax?.tex2svgPromise){try{await window.MathJax.startup.promise;return true;}catch(e){return false;}}await new Promise(resolve=>setTimeout(resolve,50));}return false;}
 async function docxLatexPng(latex,color="000000"){if(!await waitForMathJax())return null;try{const scale=DOCX_EQUATION_DPI/DOCX_SCREEN_DPI,container=await MathJax.tex2svgPromise(latex,{display:false,em:16,ex:8,containerWidth:1000});const source=container.querySelector('svg');if(!source)return null;const svg=source.cloneNode(true),viewBox=(svg.getAttribute('viewBox')||'0 0 1000 1000').trim().split(/\s+/).map(Number),ratio=viewBox[2]/Math.max(1,viewBox[3]),heightAttr=String(source.getAttribute('height')||''),heightEx=parseFloat(heightAttr),height=Math.max(12,Math.ceil(Number.isFinite(heightEx)?heightEx*8:Math.min(96,viewBox[3]/30))),width=Math.max(12,Math.ceil(height*ratio)),pixelWidth=Math.ceil(width*scale),pixelHeight=Math.ceil(height*scale),hex="#"+String(color||"000000").replace(/^#/ , "");svg.setAttribute('xmlns','http://www.w3.org/2000/svg');svg.setAttribute('width',String(pixelWidth));svg.setAttribute('height',String(pixelHeight));svg.setAttribute('color',hex);svg.style.color=hex;svg.querySelectorAll('*').forEach(el=>{const fill=el.getAttribute('fill'),stroke=el.getAttribute('stroke');if(fill&&fill!=='none')el.setAttribute('fill',hex);if(stroke&&stroke!=='none')el.setAttribute('stroke',hex);});svg.removeAttribute('style');svg.setAttribute('style',`color:${hex}`);const data='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(svg)),img=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=reject;image.src=data;}),canvas=document.createElement('canvas');canvas.width=pixelWidth;canvas.height=pixelHeight;const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);c.drawImage(img,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/png');}catch(e){console.warn('Equation export failed',latex,e);return null;}}
+function docxOmmlRun(text,color='000000',plain=false,italic=false,bold=false){
+  const value=String(text||'').replace(/[\u2061-\u2064\u200B\uFEFF]/g,'');
+  if(!value)return'';
+  const style=plain?'<m:rPr><m:sty m:val="p"/></m:rPr>':(italic?'<m:rPr><m:sty m:val="i"/></m:rPr>':''),weight=bold?'<w:b/><w:bCs/>':'';
+  return `<m:r>${style}<w:rPr><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/>${weight}<w:color w:val="${X(color||'000000')}"/></w:rPr><m:t xml:space="preserve">${X(value)}</m:t></m:r>`;
+}
+function docxMathMlElements(node){return [...(node?.childNodes||[])].filter(child=>child.nodeType===1&&child.localName!=='annotation');}
+function docxOmmlNary(node,color,body=''){
+  const children=docxMathMlElements(node),op=String(children[0]?.textContent||'').trim(),tag=String(node?.localName||'').toLowerCase();
+  if(!'∑∏∐⋂⋃∫∬∭∮∯∰'.includes(op))return'';
+  const sub=tag==='msub'||tag==='msubsup'?docxMathMlNode(children[1],color):'',sup=tag==='msup'?docxMathMlNode(children[1],color):(tag==='msubsup'?docxMathMlNode(children[2],color):''),integral='∫∬∭∮∯∰'.includes(op);
+  return `<m:nary><m:naryPr><m:chr m:val="${X(op)}"/><m:limLoc m:val="${integral?'subSup':'undOvr'}"/><m:subHide m:val="${sub?'0':'1'}"/><m:supHide m:val="${sup?'0':'1'}"/></m:naryPr><m:sub>${sub}</m:sub><m:sup>${sup}</m:sup><m:e>${body}</m:e></m:nary>`;
+}
+function docxMathMlChildren(node,color){
+  const children=docxMathMlElements(node),pairs={'(':')','[':']','{':'}','|':'|','‖':'‖'},first=String(children[0]?.textContent||'').trim(),last=String(children[children.length-1]?.textContent||'').trim();
+  if(children.length>=3&&pairs[first]===last){
+    const inner=children.slice(1,-1).map(child=>docxMathMlNode(child,color)).join('');
+    return `<m:d><m:dPr><m:begChr m:val="${X(first)}"/><m:endChr m:val="${X(last)}"/><m:sepChr m:val=""/></m:dPr><m:e>${inner}</m:e></m:d>`;
+  }
+  let out='';
+  for(let index=0;index<children.length;index++){
+    const child=children[index],tag=String(child.localName||'').toLowerCase(),nary=['msub','msup','msubsup'].includes(tag)?docxOmmlNary(child,color,children[index+1]?docxMathMlNode(children[index+1],color):''):'';
+    if(nary){out+=nary;if(children[index+1])index++;}
+    else out+=docxMathMlNode(child,color);
+  }
+  return out;
+}
+function docxMathMlNode(node,color='000000'){
+  if(!node)return'';
+  const tag=String(node.localName||node.nodeName||'').toLowerCase(),children=docxMathMlElements(node),at=index=>docxMathMlNode(children[index],color),all=()=>docxMathMlChildren(node,color);
+  if(tag==='annotation'||tag==='annotation-xml')return'';
+  if(tag==='math'||tag==='mrow'||tag==='mstyle'||tag==='mpadded'||tag==='merror'||tag==='semantics')return tag==='semantics'?(children.length?at(0):''):all();
+  if(tag==='mi'||tag==='mn'||tag==='mo'||tag==='mtext'||tag==='ms'){
+    const variant=String(node.getAttribute('mathvariant')||'').toLowerCase(),identifierLength=[...String(node.textContent||'')].length,explicitItalic=variant.includes('italic'),italic=(tag==='mi'&&variant!=='normal'&&(explicitItalic||(!variant&&identifierLength===1)))||((tag==='mtext'||tag==='ms')&&explicitItalic),bold=variant.includes('bold');
+    return docxOmmlRun(node.textContent,color,!italic,italic,bold);
+  }
+  if(tag==='mspace')return docxOmmlRun(' ',color,true);
+  if(tag==='mfrac'){
+    const noBar=/^(?:0|0px|0pt)$/.test(String(node.getAttribute('linethickness')||''));
+    return `<m:f>${noBar?'<m:fPr><m:type m:val="noBar"/></m:fPr>':''}<m:num>${at(0)}</m:num><m:den>${at(1)}</m:den></m:f>`;
+  }
+  if(tag==='msup')return docxOmmlNary(node,color)||`<m:sSup><m:e>${at(0)}</m:e><m:sup>${at(1)}</m:sup></m:sSup>`;
+  if(tag==='msub')return docxOmmlNary(node,color)||`<m:sSub><m:e>${at(0)}</m:e><m:sub>${at(1)}</m:sub></m:sSub>`;
+  if(tag==='msubsup')return docxOmmlNary(node,color)||`<m:sSubSup><m:e>${at(0)}</m:e><m:sub>${at(1)}</m:sub><m:sup>${at(2)}</m:sup></m:sSubSup>`;
+  if(tag==='msqrt')return `<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr><m:deg></m:deg><m:e>${all()}</m:e></m:rad>`;
+  if(tag==='mroot')return `<m:rad><m:deg>${at(1)}</m:deg><m:e>${at(0)}</m:e></m:rad>`;
+  if(tag==='mfenced'){
+    const open=node.getAttribute('open')??'(',close=node.getAttribute('close')??')',separators=String(node.getAttribute('separators')||',');
+    const content=children.map((child,index)=>`${index?docxOmmlRun(separators[Math.min(index-1,separators.length-1)]||',',color,true):''}${docxMathMlNode(child,color)}`).join('');
+    return `<m:d><m:dPr><m:begChr m:val="${X(open)}"/><m:endChr m:val="${X(close)}"/><m:sepChr m:val=""/></m:dPr><m:e>${content}</m:e></m:d>`;
+  }
+  if(tag==='mtable'){
+    const rows=children.filter(child=>['mtr','mlabeledtr'].includes(child.localName)).map(row=>`<m:mr>${docxMathMlElements(row).filter(cell=>cell.localName==='mtd').map(cell=>`<m:e>${docxMathMlChildren(cell,color)}</m:e>`).join('')}</m:mr>`).join('');
+    return rows?`<m:m><m:mPr><m:baseJc m:val="center"/></m:mPr>${rows}</m:m>`:all();
+  }
+  if(tag==='mtr'||tag==='mlabeledtr')return children.map(child=>docxMathMlNode(child,color)).join('');
+  if(tag==='mtd')return all();
+  if(tag==='mover'){
+    const mark=String(children[1]?.textContent||'').replace(/\s+/g,'');
+    if((node.getAttribute('accent')==='true'||children[1]?.getAttribute?.('stretchy')==='true')&&mark&&mark.length<=2)return `<m:acc><m:accPr><m:chr m:val="${X(mark)}"/></m:accPr><m:e>${at(0)}</m:e></m:acc>`;
+    return `<m:limUpp><m:e>${at(0)}</m:e><m:lim>${at(1)}</m:lim></m:limUpp>`;
+  }
+  if(tag==='munder')return `<m:limLow><m:e>${at(0)}</m:e><m:lim>${at(1)}</m:lim></m:limLow>`;
+  if(tag==='munderover')return `<m:limUpp><m:e><m:limLow><m:e>${at(0)}</m:e><m:lim>${at(1)}</m:lim></m:limLow></m:e><m:lim>${at(2)}</m:lim></m:limUpp>`;
+  if(tag==='menclose')return `<m:borderBox><m:e>${all()}</m:e></m:borderBox>`;
+  return all()||docxOmmlRun(node.textContent,color,true);
+}
+function docxLatexOmml(latex,color='000000'){
+  if(typeof katex==='undefined'||typeof katex.renderToString!=='function')return null;
+  try{
+    const holder=document.createElement('div');
+    holder.innerHTML=katex.renderToString(String(latex||''),{throwOnError:true,strict:'ignore',output:'mathml'});
+    const math=holder.querySelector('math');
+    if(!math)return null;
+    let body=docxMathMlNode(math,color);
+    if(/\\dfrac\b/.test(String(latex||''))){
+      body=body.replace(/<w:rPr>/g,'<w:rPr><w:sz w:val="28"/><w:szCs w:val="28"/>');
+      body=`<m:box><m:boxPr><m:ctrlPr><w:rPr><w:sz w:val="28"/><w:szCs w:val="28"/><w:rFonts w:ascii="Cambria Math" w:hAnsi="Cambria Math"/></w:rPr></m:ctrlPr></m:boxPr><m:e>${body}</m:e></m:box>`;
+    }
+    return body?`<m:oMath>${body}</m:oMath>`:null;
+  }catch(error){console.warn('Native Word equation conversion failed',latex,error);return null;}
+}
 function docxCssColor(value,parent='000000'){const v=String(value||'').trim();if(!v)return parent;if(/^#[0-9a-f]{3}$/i.test(v))return v.slice(1).split('').map(x=>x+x).join('').toUpperCase();if(/^#[0-9a-f]{6}$/i.test(v))return v.slice(1).toUpperCase();const m=v.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);if(m)return [m[1],m[2],m[3]].map(n=>Math.max(0,Math.min(255,parseInt(n)||0)).toString(16).padStart(2,'0')).join('').toUpperCase();return parent;}
 function docxRichStyle(node,parent){const tag=node.tagName||'',s=node.style||{};const weight=s.fontWeight||'';return{fontFamily:(s.fontFamily||parent.fontFamily||'Times New Roman').replace(/['"]/g,'').split(',')[0].trim(),fontSize:parseFloat(s.fontSize)||parent.fontSize||12,bold:parent.bold||tag==='B'||tag==='STRONG'||weight==='bold'||parseInt(weight)>=600,italic:parent.italic||tag==='I'||tag==='EM'||s.fontStyle==='italic',underline:parent.underline||tag==='U'||(s.textDecoration||'').includes('underline'),strike:parent.strike||tag==='S'||tag==='STRIKE'||(s.textDecoration||'').includes('line-through'),vert:tag==='SUB'?'subscript':tag==='SUP'?'superscript':parent.vert||'',color:docxCssColor(s.color,parent.color||'000000')};}
 function docxRichTextRun(text,style){if(!text)return'';const sz=Math.max(16,Math.round((style.fontSize||12)*2));return`<w:r><w:rPr><w:rFonts w:ascii="${X(style.fontFamily||'Times New Roman')}" w:hAnsi="${X(style.fontFamily||'Times New Roman')}" w:cs="${X(style.fontFamily||'Times New Roman')}"/>${style.bold?'<w:b/><w:bCs/>':''}${style.italic?'<w:i/><w:iCs/>':''}${style.underline?'<w:u w:val="single"/>':''}${style.strike?'<w:strike/>':''}${style.vert?`<w:vertAlign w:val="${style.vert}"/>`:''}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:color w:val="${style.color||'000000'}"/></w:rPr><w:t xml:space="preserve">${X(text)}</w:t></w:r>`;}
-async function docxRichRuns(node,style,ctx){if(node.nodeType===3)return docxRichTextRun(node.textContent,style);if(node.nodeType!==1)return'';if(node.tagName==='BR')return'<w:r><w:br/></w:r>';if(node.classList.contains('bf-equation')){const latex=node.dataset.latex||node.textContent||'',png=await docxLatexPng(latex,ctx.equationColor||'000000');if(png){const image=docxFitEquationToTarget(await docxRegisterImage(ctx,png,`Equation ${latex}`,0,0),latex);if(image)return docxImageRun(image,true,'left',ctx.saerSolutionEquationLayout||'inline');}return docxRichTextRun(latex,{...style,fontFamily:'Cambria Math'});}if(node.tagName==='IMG'&&node.src){const image=await docxRegisterImage(ctx,node.src,node.alt||'Inline image',420,220);return image?docxImageRun(image,false,ctx.tableOptionImageMode?'center':'center',ctx.tableOptionImageMode?'inline':'anchor'):'';}const next=docxRichStyle(node,style);let out='';for(const child of node.childNodes)out+=await docxRichRuns(child,next,ctx);return out;}
+function docxEquationAsImage(ctx={}){return Boolean(ctx.forceEquationImage||ctx.answerSolutionEquationLayout||ctx.saerSolutionEquationLayout);}
+async function docxRichRuns(node,style,ctx){if(node.nodeType===3)return docxRichTextRun(node.textContent,style);if(node.nodeType!==1)return'';if(node.tagName==='BR')return'<w:r><w:br/></w:r>';if(node.classList.contains('bf-equation')){const latex=node.dataset.latex||node.textContent||'',nativeEquation=docxEquationAsImage(ctx)?null:docxLatexOmml(latex,ctx.equationColor||'000000');if(nativeEquation)return nativeEquation;const png=await docxLatexPng(latex,ctx.equationColor||'000000');if(png){const image=docxFitEquationToTarget(await docxRegisterImage(ctx,png,`Equation ${latex}`,0,0),latex);if(image)return docxImageRun(image,true,'left',ctx.answerSolutionEquationLayout||(ctx.optionEquationWrapThrough?'through':(ctx.saerSolutionEquationLayout||'inline')));}return docxRichTextRun(latex,{...style,fontFamily:'Cambria Math'});}if(node.tagName==='IMG'&&node.src){const image=await docxRegisterImage(ctx,node.src,node.alt||'Inline image',420,220);return image?docxImageRun(image,false,ctx.tableOptionImageMode?'center':'center',ctx.tableOptionImageMode?'inline':'anchor'):'';}const next=docxRichStyle(node,style);let out='';for(const child of node.childNodes)out+=await docxRichRuns(child,next,ctx);return out;}
 function docxParagraphProps(node,listType){const align=(node.style?.textAlign||'left').toLowerCase(),jc=align==='center'?'center':align==='right'?'right':align==='justify'?'both':'left';const margin=parseInt(node.style?.marginLeft)||0,indent=margin?`<w:ind w:left="${Math.round(margin*15)}"/>`:'';const num=listType?`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${listType==='ol'?2:1}"/></w:numPr>`:'';return`<w:pPr><w:jc w:val="${jc}"/><w:spacing w:before="0" w:after="120" w:line="${LINE}" w:lineRule="auto"/>${num}${indent}</w:pPr>`;}
 async function docxRichHtml(html,ctx,defaultFont='Times New Roman',defaultSize=12){const root=document.createElement('div');root.innerHTML=html||'';const paras=[];const base={fontFamily:defaultFont,fontSize:defaultSize,bold:false,italic:false,underline:false,strike:false,vert:''};async function paragraph(node,listType=''){const runs=await docxRichRuns(node,docxRichStyle(node,base),ctx);paras.push(`<w:p>${docxParagraphProps(node,listType)}${runs||'<w:r><w:t></w:t></w:r>'}</w:p>`);}async function walk(node){if(node.nodeType===3){if(node.textContent.trim())await paragraph(node);return;}if(node.nodeType!==1)return;const tag=node.tagName;if(tag==='UL'||tag==='OL'){for(const li of node.children){if(li.tagName!=='LI')continue;const nested=[...li.children].filter(child=>child.tagName==='UL'||child.tagName==='OL'),copy=li.cloneNode(true);copy.querySelectorAll('ul,ol').forEach(list=>list.remove());await paragraph(copy,tag.toLowerCase());for(const list of nested)await walk(list);}}else if(tag==='P'||tag==='DIV'){const blocks=[...node.childNodes].filter(child=>child.nodeType===1&&['UL','OL','P','DIV'].includes(child.tagName));if(blocks.length){const inline=document.createElement(tag.toLowerCase());for(const child of [...node.childNodes]){if(child.nodeType===1&&['UL','OL','P','DIV'].includes(child.tagName)){if(inline.textContent.trim()||inline.querySelector('img,.bf-equation')){await paragraph(inline);inline.innerHTML='';}await walk(child);}else inline.appendChild(child.cloneNode(true));}if(inline.textContent.trim()||inline.querySelector('img,.bf-equation'))await paragraph(inline);}else await paragraph(node);}else if(tag==='LI')await paragraph(node);else if(tag==='BR')paras.push(EMPTY(0,120));else await paragraph(node);}for(const child of root.childNodes)await walk(child);return paras.length?paras:[EMPTY(0,120)];}
 const docxRichHtmlBase=docxRichHtml;
@@ -144,6 +228,13 @@ async function docxRichImageOptions(parts,item,ctx){
   parts.push(EMPTY(0,120));
 }
 async function docxRichStandardOptions(parts,item,ctx){const N=`w:val="nil"`;let optionParas='';for(let i=0;i<4;i++){const label=String.fromCharCode(65+i)+'.  ',html=item.optionsHtml?.[i],text=item.options?.[i]||'',runs=await docxRichInlineHtml(docxStoredHtml(html,text),ctx,'Times New Roman',12);optionParas+=`<w:p><w:pPr><w:jc w:val="left"/><w:ind w:left="397" w:hanging="397"/>${SP(0,120,LINE)}</w:pPr>${RUN(label,'Arial',true,false,false,24,'000000')}${runs}</w:p>`;}parts.push(`<w:tbl data-bf-standard-options="1"><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top ${N}/><w:left ${N}/><w:bottom ${N}/><w:right ${N}/><w:insideH ${N}/><w:insideV ${N}/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${TW}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${TW}" w:type="dxa"/><w:tcBorders><w:top ${N}/><w:left ${N}/><w:bottom ${N}/><w:right ${N}/></w:tcBorders><w:tcMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tcMar></w:tcPr>${optionParas}</w:tc></w:tr></w:tbl>`);parts.push(EMPTY(0,120));}async function docxRichOptions(parts,item,ctx){const template=item.optionTemplate||'standard';if(template==='table'){await docxRichOptionTable(parts,{...item,type:'mc'},ctx);return;}if(template==='diagram1'){await docxRichHybridOptions(parts,item,ctx);return;}if(template==='diagram2'||template==='diagram'){await docxRichImageOptions(parts,item,ctx);return;}if(template==='standard'){await docxRichStandardOptions(parts,item,ctx);return;}const count=item.type==='tf'?2:4;for(let i=0;i<count;i++){const label=String.fromCharCode(65+i)+'.  ',html=item.optionsHtml?.[i],text=item.options?.[i]||'';parts.push(`<w:p><w:pPr><w:jc w:val="left"/>${SP(0,i===count-1?0:120,LINE)}</w:pPr>${RUN(label,'Arial',true,false,false,24,'000000')}</w:p>`);const image=item.optionImages?.[i];if((template==='diagram2'||template==='diagram')&&image?.data){const paragraph=await docxImageParagraph(ctx,image.data,image.name||`Option ${label}`,500,280,'center');if(paragraph)parts.push(paragraph);}}parts.push(EMPTY(0,120));}
+const docxRichOptionsBase=docxRichOptions;
+docxRichOptions=async function(parts,item,ctx){
+  const previous=ctx.optionEquationWrapThrough;
+  ctx.optionEquationWrapThrough=true;
+  try{return await docxRichOptionsBase(parts,item,ctx);}
+  finally{ctx.optionEquationWrapThrough=previous;}
+};
 const docxRichStandardOptionsBase=docxRichStandardOptions;
 docxRichStandardOptions=async function(parts,item,ctx){
   const hasEquation=[0,1,2,3].some(i=>/(bf-equation|data-latex)/.test(String(item.optionsHtml?.[i]||'')));
@@ -168,12 +259,13 @@ docxRichStandardOptions=async function(parts,item,ctx){
     N=`w:val="nil"`,correct=Number(item.correct)||0,hasEquation=solutionHasLatex||[0,1,2,3].some(i=>/(bf-equation|data-latex)/.test(String(item.optionsHtml?.[i]||'')));
   if(hasEquation){
     const labelWidth=360,optionWidth=solutionHasLatex?1:TW-labelWidth,solutionWidth=solutionHasLatex?TW-labelWidth-optionWidth:0,cellBorders=`<w:tcBorders><w:top ${N}/><w:left ${N}/><w:bottom ${N}/><w:right ${N}/></w:tcBorders>`,cellMar=(after=false)=>`<w:tcMar><w:top w:w="20" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="${after?120:20}" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar>`;
-    const oldLayout=ctx.saerSolutionEquationLayout,oldColor=ctx.equationColor;
-    ctx.saerSolutionEquationLayout='front';
+    const oldAnswerLayout=ctx.answerSolutionEquationLayout,oldColor=ctx.equationColor;
     let rows='',solutionRuns='';
     if(solutionHasLatex){
+      ctx.answerSolutionEquationLayout='front';
       ctx.equationColor='FF0000';
       solutionRuns=await docxRichInlineHtml(solutionHtml,ctx,'Times New Roman',12);
+      ctx.answerSolutionEquationLayout=oldAnswerLayout;
       ctx.equationColor=oldColor;
     }
     for(let i=0;i<4;i++){
@@ -183,7 +275,7 @@ docxRichStandardOptions=async function(parts,item,ctx){
       const solutionCell=solutionHasLatex?`<w:tc><w:tcPr><w:tcW w:w="${solutionWidth}" w:type="dxa"/>${cellBorders}<w:vAlign w:val="center"/>${cellMar(i<3)}</w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="0" w:after="0" w:line="${LINE}" w:lineRule="auto"/></w:pPr>${i===0?solutionRuns:''}</w:p></w:tc>`:'';
       rows+=`<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${labelWidth}" w:type="dxa"/>${cellBorders}<w:vAlign w:val="center"/>${cellMar(i<3)}</w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="0" w:after="0" w:line="${LINE}" w:lineRule="auto"/></w:pPr>${RUN(label,'Arial',true,false,false,24,labelColor)}</w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="${optionWidth}" w:type="dxa"/>${cellBorders}<w:vAlign w:val="center"/>${cellMar(i<3)}</w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="0" w:after="0" w:line="${LINE}" w:lineRule="auto"/></w:pPr>${runs}</w:p></w:tc>${solutionCell}</w:tr>`;
     }
-    ctx.saerSolutionEquationLayout=oldLayout;
+    ctx.answerSolutionEquationLayout=oldAnswerLayout;
     ctx.equationColor=oldColor;
     parts.push(`<w:tbl data-bf-standard-options="1"><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblLayout w:type="${solutionHasLatex?'autofit':'fixed'}"/><w:tblBorders><w:top ${N}/><w:left ${N}/><w:bottom ${N}/><w:right ${N}/><w:insideH ${N}/><w:insideV ${N}/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${labelWidth}"/><w:gridCol w:w="${optionWidth}"/>${solutionHasLatex?`<w:gridCol w:w="${solutionWidth}"/>`:''}</w:tblGrid>${rows}</w:tbl>`);
     parts.push(EMPTY(0,120));return;
@@ -1469,13 +1561,14 @@ function bfDocxCoverHtmlBlocks(html,ctx,heading){
   if(!clean)return [];
   return [bfDocxCoverBeforeGap(),bfDocxPlainParagraph(heading,'Arial',12,true,'left',0,120),...docxCoverHtmlToRich(clean,ctx)];
 }
-function bfDocxCoverContents(sectionDefs,byType){
+function bfDocxCoverContents(sectionDefs,byType,pageLayout={}){
   if(!sectionDefs?.length)return [];
   const parts=[bfDocxCoverBeforeGap(),'<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + TW + '"/></w:tabs><w:jc w:val="left"/>' + SP(0,120,LINE) + '</w:pPr>' + RUN('Contents','Arial',true,false,false,24,'000000') + '<w:r><w:tab/></w:r>' + RUN('Pages','Arial',false,false,false,24,'000000') + '</w:p>'];
   sectionDefs.forEach(s=>{
     const ql=byType[s.key]||[],questions=ql.reduce((sum,q)=>sum+logicalQuestionCount(q),0),marks=ql.reduce((sum,q)=>sum+(Number(q.marks)||0),0);
-    const label='Section ' + s.letter + ' (' + questions + ' Question' + (questions!==1?'s':'') + ', ' + marks + ' Mark' + (marks!==1?'s':'') + ') ';
-    parts.push('<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + TW + '"/></w:tabs><w:jc w:val="left"/>' + SP(0,120,LINE) + '</w:pPr>' + RUN(label,'Arial',false,false,false,22,'000000') + RUN('_'.repeat(50),'Arial',false,false,false,22,'000000') + '<w:r><w:tab/></w:r>' + RUN('xx - xx','Arial',false,false,false,22,'000000') + '</w:p>');
+    const label=sectionDefs.length===1?(questions + ' Question' + (questions!==1?'s':'') + ' (' + marks + ' mark' + (marks!==1?'s':'') + ') '):('Section ' + s.letter + ' (' + questions + ' Question' + (questions!==1?'s':'') + ', ' + marks + ' Mark' + (marks!==1?'s':'') + ') ');
+    const range=pageLayout?.sections?.[s.key],pageText=range?(range.start===range.end?String(range.start):(range.start+' - '+range.end)):'';
+    parts.push('<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + TW + '"/></w:tabs><w:jc w:val="left"/>' + SP(0,120,LINE) + '</w:pPr>' + RUN(label,'Arial',false,false,false,22,'000000') + RUN('_'.repeat(50),'Arial',false,false,false,22,'000000') + '<w:r><w:tab/></w:r>' + RUN(pageText,'Arial',false,false,false,22,'000000') + '</w:p>');
   });
   return parts;
 }
@@ -1486,18 +1579,27 @@ async function bfDocxExamCoverPage(ctx,title,qs,sectionDefs,byType,totalMarks,ex
   if(logo)parts.push(logo.replace(/<w:spacing\b[^>]*\/>/,'<w:spacing w:before="0" w:after="120" w:line="' + LINE + '" w:lineRule="auto"/>'));
   const B='w:val="single" w:sz="4" w:space="0" w:color="000000"',N='w:val="nil"';
   parts.push('<w:tbl><w:tblPr><w:tblW w:w="5670" w:type="dxa"/><w:jc w:val="right"/><w:tblBorders><w:top '+N+'/><w:left '+N+'/><w:bottom '+N+'/><w:right '+N+'/><w:insideH '+N+'/><w:insideV '+N+'/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5670"/></w:tblGrid><w:tr><w:trPr><w:trHeight w:val="397" w:hRule="exact"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="5670" w:type="dxa"/><w:tcBorders><w:top '+B+'/><w:left '+B+'/><w:bottom '+B+'/><w:right '+B+'/></w:tcBorders><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:p></w:tc></w:tr><w:tr><w:trPr><w:trHeight w:val="397" w:hRule="exact"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="5670" w:type="dxa"/><w:tcBorders><w:top '+N+'/><w:left '+N+'/><w:bottom '+N+'/><w:right '+N+'/></w:tcBorders><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="left"/><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>'+RUN('STUDENT NAME','Arial',false,false,false,24,'000000')+'</w:p></w:tc></w:tr></w:tbl>');
-  parts.push(EMPTY(240,0),bfDocxPlainParagraph(details.subject||'','Arial',24,false,'left',0,0),bfDocxPlainParagraph(details.examination||'','Arial',24,false,'left',0,0),bfDocxPlainParagraph('Question and Answer Book','Arial',16,false,'left',0,120));
+  const genericExamination=typeof examUsesGenericExamination==='function'?examUsesGenericExamination(details):String(details.examination||'').trim().toLowerCase()==='examination';
+  parts.push(EMPTY(240,0));
+  if(genericExamination)parts.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="504" w:lineRule="exact"/></w:pPr><w:r><w:t></w:t></w:r></w:p>',bfDocxPlainParagraph(details.subject||'','Arial',24,false,'left',0,0));
+  else parts.push(bfDocxPlainParagraph(details.subject||'','Arial',24,false,'left',0,0),bfDocxPlainParagraph(details.examination||'','Arial',24,false,'left',0,0));
+  const coverBookTitle=typeof examCoverBookTitle==='function'
+    ?examCoverBookTitle(details)
+    :(String(details.subject||'').trim().toLowerCase()==='general mathematics'&&String(details.examination||'').trim().toLowerCase()==='examination 1'?'Multiple-Choice Question Book':'Question and Answer Book');
+  parts.push(bfDocxPlainParagraph(coverBookTitle,'Arial',16,false,'left',0,120));
   const examDate=details.date?new Date(details.date):null,dateText=examDate&&!isNaN(examDate)?examDate.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'';
-  parts.push(bfDocxPlainParagraph((details.schoolName||'Brain Forge') + ' ' + (details.examination||'Examination') + (dateText?' - '+dateText:''),'Arial',12,false,'left',0,0));
+  parts.push(bfDocxPlainParagraph((details.schoolName||'Brain Forge') + ' Examination' + (dateText?' - '+dateText:''),'Arial',12,false,'left',0,0));
   parts.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/></w:pBdr>'+SP(0,120,LINE)+'</w:pPr></w:p>');
   const timeSummary=bfExamTimeSummary(details);
-  parts.push(bfDocxCoverBeforeGap(),bfDocxTimeParagraph(timeSummary.readingPrefix,timeSummary.readingDuration,timeSummary.readingSuffix,0,120));
-  parts.push(bfDocxTimeParagraph(timeSummary.writingPrefix,timeSummary.writingDuration,timeSummary.writingSuffix,0,120));
+  const timeBullet=String.fromCharCode(8226)+' ';
+  parts.push(bfDocxCoverBeforeGap(),bfDocxTimeParagraph(timeBullet+timeSummary.readingPrefix,timeSummary.readingDuration,timeSummary.readingSuffix,0,120));
+  parts.push(bfDocxTimeParagraph(timeBullet+timeSummary.writingPrefix,timeSummary.writingDuration,timeSummary.writingSuffix,0,120));
   parts.push(...bfDocxCoverHtmlBlocks(cp.approvedMaterialsHtml||coverPlainTextToHtml(cp.approvedMaterials||''),ctx,'Approved Materials'));
-  parts.push(...bfDocxCoverHtmlBlocks(cp.materialsSuppliedHtml||coverPlainTextToHtml(cp.materialsSupplied||''),ctx,'Materials Supplied'));
+  const suppliedHtml=cp.materialsSuppliedHtml||coverPlainTextToHtml(cp.materialsSupplied||''),pageCount=examDetailsOverride.pageLayout?.totalPages||1;
+  parts.push(...bfDocxCoverHtmlBlocks(typeof examCoverPageCountHtml==='function'?examCoverPageCountHtml(suppliedHtml,pageCount):suppliedHtml,ctx,'Materials Supplied'));
   parts.push(...bfDocxCoverHtmlBlocks(cp.instructionsHtml||coverPlainTextToHtml(cp.instructions||''),ctx,'Instructions'));
   parts.push('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/></w:pBdr>'+SP(120,120,LINE)+'</w:pPr></w:p>');
-  parts.push(...bfDocxCoverContents(sectionDefs,byType));
+  parts.push(...bfDocxCoverContents(sectionDefs,byType,examDetailsOverride.pageLayout||{}));
   return parts;
 }
 const SAER_TABLE_W=10091,SAER_MAIN_TABLE_W=10466;function bfDocxSourceParagraph(text,type='source'){return `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="120" w:line="${LINE}" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t>${X(sourceTypeLabel(type)+': '+text)}</w:t></w:r></w:p>`;}
@@ -1784,7 +1886,7 @@ async function bfDocxWrittenQuestion(q,ctx,qNumber){
 
   for(const s of sectionDefs){
     const ql=byType[s.key],marks=ql.reduce((a,q)=>a+(Number(q.marks)||0),0);
-    parts.push(`<w:p><w:pPr><w:pageBreakBefore/><w:jc w:val="left"/><w:spacing w:before="0" w:after="120" w:line="240" w:lineRule="auto"/></w:pPr>${RUN(s.heading,'Arial',true,false,false,32,'000000')}${RUN(` (${marks} marks)`,'Arial',false,false,false,32,'000000')}</w:p>`);
+    parts.push(sectionDefs.length===1?'<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:before="0" w:after="0" w:line="1" w:lineRule="exact"/></w:pPr></w:p>':`<w:p><w:pPr><w:pageBreakBefore/><w:jc w:val="left"/><w:spacing w:before="0" w:after="120" w:line="240" w:lineRule="auto"/></w:pPr>${RUN(s.heading,'Arial',true,false,false,32,'000000')}</w:p>`);
     const instrHtml=String(iHtml[s.key]||DEFAULT_INSTR_HTML[s.key]).replace(/Instructions for Section [A-D]/g,`Instructions for Section ${s.letter}`),
       instr=docxCompactInstructionParagraphs(await docxRichHtml(instrHtml,ctx,'Times New Roman',12)).join(''),B=`w:val="single" w:sz="4" w:space="0" w:color="000000"`;
     parts.push(`<w:tbl><w:tblPr><w:tblW w:w="${TW}" w:type="dxa"/><w:tblBorders><w:top ${B}/><w:left ${B}/><w:bottom ${B}/><w:right ${B}/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${TW}"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="${TW}" w:type="dxa"/></w:tcPr>${instr}</w:tc></w:tr></w:tbl>`,EMPTY(120,120));
@@ -1803,14 +1905,15 @@ async function bfDocxWrittenQuestion(q,ctx,qNumber){
     }
   }
   const footerXml=await bfDocxFooterXml(ctx,bfExportExamDetails(examDetailsOverride)),footerRelsXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${(ctx.footerRels||[]).join('')}</Relationships>`,mediaTypes=ctx.items.map(item=>`<Override PartName="/word/media/${X(item.file)}" ContentType="${item.contentType||'image/png'}"/>`).join(''),
-    WNS='xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" mc:Ignorable="w14"',
+    WNS='xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" mc:Ignorable="w14"',
     docXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${WNS}><w:body>${parts.join('')}<w:sectPr><w:titlePg/><w:footerReference w:type="first" r:id="rIdFooter1"/><w:footerReference w:type="default" r:id="rIdEmptyFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="${MRG}" w:right="${MRG}" w:bottom="${MRG}" w:left="${MRG}" w:header="708" w:footer="340"/></w:sectPr></w:body></w:document>`,
     stylesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:jc w:val="left"/>${SP(0,120,LINE)}</w:pPr></w:pPrDefault></w:docDefaults></w:styles>`,
-    cTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>${mediaTypes}</Types>`,
+    settingsXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:mathPr><m:mathFont m:val="Cambria Math"/><m:brkBin m:val="before"/><m:brkBinSub m:val="--"/><m:smallFrac m:val="0"/><m:intLim m:val="subSup"/><m:naryLim m:val="undOvr"/></m:mathPr></w:settings>`,
+    cTypes=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>${mediaTypes}</Types>`,
     rRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
-    wRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rIdEmptyFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>${ctx.rels.join('')}</Relationships>`,
+    wRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rIdEmptyFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>${ctx.rels.join('')}</Relationships>`,
     zip=new JSZip();
-  zip.file('[Content_Types].xml',cTypes);zip.file('_rels/.rels',rRels);zip.file('word/document.xml',docXml);zip.file('word/footer1.xml',footerXml);zip.file('word/footer2.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p/></w:ftr>');zip.file('word/_rels/footer1.xml.rels',footerRelsXml);zip.file('word/styles.xml',stylesXml);zip.file('word/numbering.xml',docxRichNumberingXml());zip.file('word/_rels/document.xml.rels',wRels);ctx.items.forEach(item=>zip.file(`word/media/${item.file}`,item.base64,{base64:true}));
+  zip.file('[Content_Types].xml',cTypes);zip.file('_rels/.rels',rRels);zip.file('word/document.xml',docXml);zip.file('word/footer1.xml',footerXml);zip.file('word/footer2.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p/></w:ftr>');zip.file('word/_rels/footer1.xml.rels',footerRelsXml);zip.file('word/styles.xml',stylesXml);zip.file('word/settings.xml',settingsXml);zip.file('word/numbering.xml',docxRichNumberingXml());zip.file('word/_rels/document.xml.rels',wRels);ctx.items.forEach(item=>zip.file(`word/media/${item.file}`,item.base64,{base64:true}));
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 buildDocxRich=buildDocxRichClean;
@@ -1888,10 +1991,10 @@ function bfSaerSolutionColourSteps(lines,ctx=null){
   });
   return out;
 }async function bfDocxSaerSolutionTable(q,ctx,width=SAER_TABLE_W,align='right'){
-  const html=q.solutionHtml||esc(q.solution||''),oldColor=ctx.equationColor,oldLayout=ctx.saerSolutionEquationLayout;
+  const html=q.solutionHtml||esc(q.solution||''),oldColor=ctx.equationColor,oldLayout=ctx.saerSolutionEquationLayout,oldAnswerLayout=ctx.answerSolutionEquationLayout;
   let paras=[];
   const solutionLines=bfSaerSolutionColourSteps(bfSolutionLineHtmls(html),ctx);
-  ctx.saerSolutionEquationLayout='front';
+  ctx.answerSolutionEquationLayout='front';
   for(const line of solutionLines){
     ctx.equationColor=line.colour;
     const lineParas=await docxRichHtml(line.html,ctx,'Times New Roman',12);
@@ -1899,6 +2002,7 @@ function bfSaerSolutionColourSteps(lines,ctx=null){
   }
   ctx.equationColor=oldColor;
   ctx.saerSolutionEquationLayout=oldLayout;
+  ctx.answerSolutionEquationLayout=oldAnswerLayout;
   paras=paras.map(bfDocxStyleSaerSolutionRuns).map(bfCompactDocxParagraph).filter(p=>p&&(!/^<w:p>[\s\S]*?<w:t>\s*<\/w:t>[\s\S]*?<\/w:p>$/.test(p)||p.includes('<w:drawing')));
   if(!paras.length)paras=[`<w:p><w:pPr><w:jc w:val="left"/>${SP(0,0,LINE)}</w:pPr>${RUN('No solution added.','Times New Roman',false,true,false,24,'888888')}</w:p>`];
   const rows=Math.max(nonNegativeInt(q.lines,0),paras.length),N='w:val="nil"',B='w:val="single" w:sz="4" w:space="0" w:color="000000"',rowH=510;
@@ -1906,11 +2010,11 @@ function bfSaerSolutionColourSteps(lines,ctx=null){
   return `<w:tbl><w:tblPr><w:tblW w:w="${width}" w:type="dxa"/><w:jc w:val="${align}"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top ${N}/><w:left ${N}/><w:bottom ${N}/><w:right ${N}/><w:insideH ${N}/><w:insideV ${N}/></w:tblBorders><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${width}"/></w:tblGrid>${rowXml}</w:tbl>`;
 }
 async function bfDocxMcSolutionContent(solutionHtml,ctx){
-  const oldColor=ctx.equationColor,oldLayout=ctx.saerSolutionEquationLayout;
+  const oldColor=ctx.equationColor,oldLayout=ctx.saerSolutionEquationLayout,oldAnswerLayout=ctx.answerSolutionEquationLayout;
   ctx.equationColor='FF0000';
-  ctx.saerSolutionEquationLayout='front';
+  ctx.answerSolutionEquationLayout='front';
   try{return await docxRichHtml(solutionHtml,ctx,'Times New Roman',12);}
-  finally{ctx.equationColor=oldColor;ctx.saerSolutionEquationLayout=oldLayout;}
+  finally{ctx.equationColor=oldColor;ctx.saerSolutionEquationLayout=oldLayout;ctx.answerSolutionEquationLayout=oldAnswerLayout;}
 }
 async function bfDocxAnswerEntry(q,ctx,qNumber){
   const parts=[];
@@ -1940,7 +2044,7 @@ async function buildAnswerDocx(title,qs,examDetailsOverride={}){
     parts=[];
   parts.push(`<w:p><w:pPr><w:jc w:val="center"/>${SP(200,120,LINE)}</w:pPr>${RUN(`${title} - ANSWERS AND SOLUTIONS`,'Arial',true,false,false,34,'000000')}</w:p>`,EMPTY(0,120));
   for(const s of sectionDefs){
-    parts.push(`<w:p><w:pPr><w:pageBreakBefore/><w:jc w:val="left"/>${SP(0,120,LINE)}</w:pPr>${RUN(s.heading,'Arial',true,false,false,30,'000000')}</w:p>`);
+    parts.push(sectionDefs.length===1?'<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:before="0" w:after="0" w:line="1" w:lineRule="exact"/></w:pPr></w:p>':`<w:p><w:pPr><w:pageBreakBefore/><w:jc w:val="left"/>${SP(0,120,LINE)}</w:pPr>${RUN(s.heading,'Arial',true,false,false,30,'000000')}</w:p>`);
     let qNum=1;
     for(const q of byType[s.key]){
       if(q.type==='mc'&&q.template==='multiple'&&q.subQuestions?.length){
@@ -1979,7 +2083,7 @@ async function bfColorAnswerLettersInDocx(blob,qs){
   zip.file(path,new XMLSerializer().serializeToString(doc));
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
-async function exportExam(){if(!canUseTeacherQuestionSet(examQuestions))return;if(!canUseTeacherMonthlyExport('normal'))return;if(!examQuestions.length){showToast('No questions in exam',true);return;}if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}syncInstrHTML();syncCoverPage();const btn=document.getElementById('export-btn');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i> Building...';try{const title=document.getElementById('exam-title').value||'Exam';const blob=await buildDocxRich(title,examQuestions,instrHTML,{...getExamDetails(),coverPage:{...coverPage}});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=title.replace(/\s+/g,'_')+'.docx';a.click();recordTeacherMonthlyExport('normal');showToast('Exported as .docx!');}catch(e){showToast('Export failed: '+e.message,true);console.error(e);}finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-download"></i>Export';}}
-async function exportAnswers(){if(!canUseTeacherQuestionSet(examQuestions))return;if(!canUseTeacherMonthlyExport('answers'))return;if(!examQuestions.length){showToast('No questions in exam',true);return;}if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}syncInstrHTML();syncCoverPage();const btn=document.getElementById('export-answers-btn');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i> Building...';try{const title=document.getElementById('exam-title').value||'Exam',answerQuestions=bfPrepareAnswerExportQuestions(examQuestions);DOCX_ANSWER_EXPORT_MODE=true;const rawBlob=await buildDocxRich(title,answerQuestions,instrHTML,{...getExamDetails(),coverPage:{...coverPage}});DOCX_ANSWER_EXPORT_MODE=false;const blob=await bfColorAnswerLettersInDocx(rawBlob,answerQuestions);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=title.replace(/\s+/g,'_')+'_Answers.docx';a.click();recordTeacherMonthlyExport('answers');showToast('Exported answer copy as .docx!');}catch(e){DOCX_ANSWER_EXPORT_MODE=false;showToast('Answer export failed: '+e.message,true);console.error(e);}finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-file-check"></i>Answers';}}
-async function exportPaper(id){if(!canUseTeacherMonthlyExport('normal'))return;if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}const p=savedPapers.find(x=>x.id===id);if(!p)return;if(!canUseTeacherQuestionSet(p.questions||[]))return;try{const iHtml=p.instrHTML||instrHTML;const blob=await buildDocxRich(p.title,p.questions,iHtml,{...(p.examDetails||{}),coverPage:p.coverPage||coverDefaultsForDetails(p.examDetails||{})});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=p.title.replace(/\s+/g,'_')+'.docx';a.click();recordTeacherMonthlyExport('normal');showToast('Exported '+p.title);}catch(e){showToast('Export failed: '+e.message,true);}}
-async function exportPaperAnswers(id){if(!canUseTeacherMonthlyExport('answers'))return;if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}const p=savedPapers.find(x=>x.id===id);if(!p)return;if(!canUseTeacherQuestionSet(p.questions||[]))return;try{const iHtml=p.instrHTML||instrHTML,answerQuestions=bfPrepareAnswerExportQuestions(p.questions||[]);DOCX_ANSWER_EXPORT_MODE=true;const rawBlob=await buildDocxRich(p.title,answerQuestions,iHtml,{...(p.examDetails||{}),coverPage:p.coverPage||coverDefaultsForDetails(p.examDetails||{})});DOCX_ANSWER_EXPORT_MODE=false;const blob=await bfColorAnswerLettersInDocx(rawBlob,answerQuestions);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=p.title.replace(/\s+/g,'_')+'_Answers.docx';a.click();recordTeacherMonthlyExport('answers');showToast('Exported answer copy for '+p.title);}catch(e){DOCX_ANSWER_EXPORT_MODE=false;showToast('Answer export failed: '+e.message,true);console.error(e);}}
+async function exportExam(){if(!canUseTeacherQuestionSet(examQuestions))return;if(!canUseTeacherMonthlyExport('normal'))return;if(!examQuestions.length){showToast('No questions in exam',true);return;}if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}syncInstrHTML();syncCoverPage();const btn=document.getElementById('export-btn');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i> Building...';try{const title=document.getElementById('exam-title').value||'Exam',pageLayout=await calculateExamPageLayout(examQuestions,instrHTML,examPageBreaks);const blob=await buildDocxRich(title,examQuestions,instrHTML,{...getExamDetails(),coverPage:{...coverPage},pageLayout});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=title.replace(/\s+/g,'_')+'.docx';a.click();recordTeacherMonthlyExport('normal');showToast('Exported as .docx!');}catch(e){showToast('Export failed: '+e.message,true);console.error(e);}finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-download"></i>Export';}}
+async function exportAnswers(){if(!canUseTeacherQuestionSet(examQuestions))return;if(!canUseTeacherMonthlyExport('answers'))return;if(!examQuestions.length){showToast('No questions in exam',true);return;}if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}syncInstrHTML();syncCoverPage();const btn=document.getElementById('export-answers-btn');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader"></i> Building...';try{const title=document.getElementById('exam-title').value||'Exam',pageLayout=await calculateExamPageLayout(examQuestions,instrHTML,examPageBreaks),answerQuestions=bfPrepareAnswerExportQuestions(examQuestions);DOCX_ANSWER_EXPORT_MODE=true;const rawBlob=await buildDocxRich(title,answerQuestions,instrHTML,{...getExamDetails(),coverPage:{...coverPage},pageLayout});DOCX_ANSWER_EXPORT_MODE=false;const blob=await bfColorAnswerLettersInDocx(rawBlob,answerQuestions);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=title.replace(/\s+/g,'_')+'_Answers.docx';a.click();recordTeacherMonthlyExport('answers');showToast('Exported answer copy as .docx!');}catch(e){DOCX_ANSWER_EXPORT_MODE=false;showToast('Answer export failed: '+e.message,true);console.error(e);}finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-file-check"></i>Answers';}}
+async function exportPaper(id){if(!canUseTeacherMonthlyExport('normal'))return;if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}const p=typeof ensureFullSavedPaper==='function'?await ensureFullSavedPaper(id,'Loading paper for export...'):(typeof findSavedPaper==='function'?findSavedPaper(id):savedPapers.find(x=>String(x.id)===String(id)));if(!p)return;if(!canUseTeacherQuestionSet(p.questions||[]))return;try{const iHtml=p.instrHTML||instrHTML,pageLayout=await calculateExamPageLayout(p.questions||[],iHtml,p.pageBreaks||[]);const blob=await buildDocxRich(p.title,p.questions,iHtml,{...(p.examDetails||{}),coverPage:p.coverPage||coverDefaultsForDetails(p.examDetails||{}),pageLayout});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=p.title.replace(/\s+/g,'_')+'.docx';a.click();recordTeacherMonthlyExport('normal');showToast('Exported '+p.title);}catch(e){showToast('Export failed: '+e.message,true);}}
+async function exportPaperAnswers(id){if(!canUseTeacherMonthlyExport('answers'))return;if(typeof JSZip==='undefined'){showToast('ZIP library not ready',true);return;}const p=typeof ensureFullSavedPaper==='function'?await ensureFullSavedPaper(id,'Loading paper answers...'):(typeof findSavedPaper==='function'?findSavedPaper(id):savedPapers.find(x=>String(x.id)===String(id)));if(!p)return;if(!canUseTeacherQuestionSet(p.questions||[]))return;try{const iHtml=p.instrHTML||instrHTML,pageLayout=await calculateExamPageLayout(p.questions||[],iHtml,p.pageBreaks||[]),answerQuestions=bfPrepareAnswerExportQuestions(p.questions||[]);DOCX_ANSWER_EXPORT_MODE=true;const rawBlob=await buildDocxRich(p.title,answerQuestions,iHtml,{...(p.examDetails||{}),coverPage:p.coverPage||coverDefaultsForDetails(p.examDetails||{}),pageLayout});DOCX_ANSWER_EXPORT_MODE=false;const blob=await bfColorAnswerLettersInDocx(rawBlob,answerQuestions);const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=p.title.replace(/\s+/g,'_')+'_Answers.docx';a.click();recordTeacherMonthlyExport('answers');showToast('Exported answer copy for '+p.title);}catch(e){DOCX_ANSWER_EXPORT_MODE=false;showToast('Answer export failed: '+e.message,true);console.error(e);}}

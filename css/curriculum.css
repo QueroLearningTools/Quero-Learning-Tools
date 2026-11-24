@@ -28,13 +28,17 @@
 
 .curriculum-check input{width:14px;height:14px}
 
-.curriculum-link-item{display:flex;align-items:center;gap:7px;border:0.5px solid var(--color-border-tertiary);border-radius:7px;background:var(--color-background-secondary);padding:8px 9px;font-size:13px;color:var(--color-text-primary);cursor:pointer}
+.curriculum-link-item{display:flex;align-items:center;gap:7px;border:0.5px solid var(--color-border-tertiary);border-radius:7px;background:var(--color-background-secondary);padding:4px 5px 4px 9px;font-size:13px;color:var(--color-text-primary)}
 
 .curriculum-link-item input{width:14px;height:14px;flex:0 0 auto}
 
+.curriculum-link-name{min-width:0;flex:1;border:0;border-radius:5px;background:transparent;color:inherit;padding:5px 4px;text-align:left;font:inherit;cursor:pointer}
+
+.curriculum-link-name:hover{background:rgba(99,102,241,.08)}
+
 .curriculum-link-item.checked{background:#eefdf3;border-color:#86efac;color:#166534;font-weight:700}
 
-.curriculum-link-item.active{outline:2px solid #c7d2fe}
+.curriculum-link-item.active{outline:2px solid #818cf8;outline-offset:-1px}
 
 .curriculum-warning{display:flex;align-items:center;gap:6px;margin-top:7px;padding:7px 9px;border-radius:7px;background:#fff7ed;color:#9a3412;font-size:12px;border:0.5px solid #fed7aa}
 
@@ -51,6 +55,12 @@
 .curriculum-learning-tab.danger{color:#b91c1c;border-color:#fecaca;background:#fff1f2}
 
 .curriculum-note{font-size:12px;color:var(--color-text-secondary)}
+
+.curriculum-save-status{display:inline-flex;align-items:center;gap:7px;min-width:82px;justify-content:center;padding:7px 10px;border:0.5px solid #bbf7d0;border-radius:7px;background:#f0fdf4;color:#166534;font-size:12px;font-weight:700;white-space:nowrap}
+.curriculum-save-status[data-state="saving"]{border-color:#c7d2fe;background:#eef2ff;color:#4338ca}
+.curriculum-save-status[data-state="saving"] i{animation:curriculum-save-spin .9s linear infinite}
+.curriculum-save-status[data-state="error"]{border-color:#fecaca;background:#fff1f2;color:#b91c1c}
+@keyframes curriculum-save-spin{to{transform:rotate(360deg)}}
 
 .curriculum-subject-panel{border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-primary);padding:10px;margin-bottom:12px}
 

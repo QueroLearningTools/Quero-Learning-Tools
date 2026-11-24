@@ -11,10 +11,33 @@
 #view-bank .bank-tab:hover{background:transparent;color:#075c83}
 #view-bank .bank-tab.active{border-bottom-color:#0879ad;background:transparent;color:#075c83;font-weight:700}
 #view-bank .bank-tab[onclick="toggleBankManager()"]{margin-left:auto;color:#304256}
+#view-bank .bank-tab-off{color:#8793a2}
+#view-bank .bank-off-label{display:inline-flex;align-items:center;height:19px;padding:0 7px;border-radius:10px;background:#edf1f5;color:#68778a;font-size:11px;font-weight:600}
 
 #view-bank .bank-manager-panel{margin:0 0 24px;padding:18px;border:1px solid #d5e1ef;border-radius:8px;background:#fff}
 #view-bank .bank-manager-grid{gap:12px}
 #view-bank .bank-manager-note{font-size:12px;margin-top:12px}
+#view-bank .bank-manager-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-top:15px;border:1px solid #d5e1ef;border-radius:8px;overflow:hidden}
+#view-bank .bank-manager-row{min-width:0;border:0;border-bottom:1px solid #dfe7f0;border-radius:0;padding:13px 14px;background:#fff}
+#view-bank .bank-manager-row:nth-child(odd){border-right:1px solid #dfe7f0}
+#view-bank .bank-manager-row:nth-last-child(-n+2){border-bottom:0}
+#view-bank .bank-manager-row.is-off{background:#f6f8fa}
+#view-bank .bank-manager-identity{display:flex;align-items:center;gap:10px;min-width:0}
+#view-bank .bank-manager-icon{width:36px;height:36px;flex:0 0 36px;border-radius:7px;background:#f0edff;color:#5746cb;display:grid;place-items:center;font-size:18px}
+#view-bank .bank-manager-identity>div{min-width:0;display:flex;flex-direction:column;gap:3px}
+#view-bank .bank-manager-identity strong,#view-bank .bank-manager-identity span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#view-bank .bank-manager-identity>div>span{color:#68778a;font-size:11px;text-transform:capitalize}
+#view-bank .bank-manager-row-actions{gap:8px;flex:0 0 auto}
+#view-bank .bank-manager-status{display:inline-flex;align-items:center;gap:2px;color:#68778a;font-size:12px}
+#view-bank .bank-manager-status i{font-size:15px}
+#view-bank .bank-manager-status.is-live{color:#13834f}
+#view-bank .bank-live-switch{position:relative;width:42px;height:24px;flex:0 0 42px}
+#view-bank .bank-live-switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0}
+#view-bank .bank-live-switch span{position:absolute;inset:0;border-radius:999px;background:#ced8e5;transition:background .15s ease}
+#view-bank .bank-live-switch span:after{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,39,63,.25);transition:transform .15s ease}
+#view-bank .bank-live-switch input:checked+span{background:#168a54}
+#view-bank .bank-live-switch input:checked+span:after{transform:translateX(18px)}
+#view-bank .bank-live-switch input:focus-visible+span{outline:2px solid #0879ad;outline-offset:2px}
 
 #view-bank .bank-filter-row{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 28px}
 #view-bank .bank-filter-row input,#view-bank .bank-filter-row select{height:39px;min-width:0;padding:0 12px;border:1px solid #cfdaea;border-radius:7px;background:#fff;color:#42536a;font-size:13px}
@@ -37,6 +60,9 @@
 
 @media(max-width:1000px){
   #view-bank .bank-filter-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #view-bank .bank-manager-list{grid-template-columns:1fr}
+  #view-bank .bank-manager-row:nth-child(odd){border-right:0}
+  #view-bank .bank-manager-row:nth-last-child(2){border-bottom:1px solid #dfe7f0}
 }
 @media(max-width:820px){
   #view-bank{padding:32px 28px}
@@ -57,4 +83,6 @@
   #view-bank .q-actions{gap:0}
   #view-bank .q-actions .icon-btn{min-width:22px;font-size:14px}
   #view-bank .bank-manager-grid{grid-template-columns:1fr}
+  #view-bank .bank-manager-row{align-items:flex-start;flex-direction:column}
+  #view-bank .bank-manager-row-actions{width:100%;justify-content:flex-end}
 }

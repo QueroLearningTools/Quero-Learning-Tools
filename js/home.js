@@ -54,6 +54,7 @@
   let homeClassroomsLoadAttemptedForKey = '';
   let homeArchivedClassroomsLoadedForKey = '';
   let homeArchivedClassroomsLoadingForKey = '';
+  let homeArchivedClassroomsLoadAttemptedForKey = '';
   let homeTodoRealtimeKey = '';
   let homeTodoRealtimeChannels = [];
   let homeTodoRealtimeRefreshTimer = null;
@@ -369,16 +370,27 @@
       const previousOpenKey = previousOpenClass ? homeClassroomMatchKey(previousOpenClass,homeOpenClassIndex) : '';
       const classes = await sync.loadClassrooms();
       if(!Array.isArray(classes)) return false;
-      saveHomeClasses(classes);
+      const activeKeys = new Set(classes.map((cls,index)=>homeClassroomMatchKey(cls,index)));
+      const archivedClasses = previousClasses.filter((cls,index)=>cls?.archived && !activeKeys.has(homeClassroomMatchKey(cls,index)));
+      const mergedClasses = classes.concat(archivedClasses);
+      saveHomeClasses(mergedClasses);
+      const examSubject=document.getElementById('exam-subject');
+      if(examSubject&&!examSubject.value&&typeof syncExamSubjectOptions==='function'){
+        syncExamSubjectOptions('');
+        if(examSubject.value&&typeof updateExamTitleFromMetadata==='function')updateExamTitleFromMetadata();
+        if(examSubject.value&&typeof saveState==='function')saveState();
+      }
       syncHomeTodoRealtime(homeVisibleClasses(classes));
       homeClassroomsLoadedForKey = key;
+      homeArchivedClassroomsLoadedForKey = '';
+      homeArchivedClassroomsLoadAttemptedForKey = '';
       homeClassroomsLoadAttemptedForKey = key;
       if(homeClassroomsLoadingForKey === key) homeClassroomsLoadingForKey = '';
       if(previousOpenKey){
-        const nextIndex = classes.findIndex((cls,index)=>homeClassroomMatchKey(cls,index) === previousOpenKey);
+        const nextIndex = mergedClasses.findIndex((cls,index)=>homeClassroomMatchKey(cls,index) === previousOpenKey);
         homeOpenClassIndex = nextIndex >= 0 ? nextIndex : null;
-        if(nextIndex >= 0 && homeClassTab === 'home') markHomeClassActivityRead(classes[nextIndex]);
-      }else if(Number.isInteger(homeOpenClassIndex) && !classes[homeOpenClassIndex]){
+        if(nextIndex >= 0 && homeClassTab === 'home') markHomeClassActivityRead(mergedClasses[nextIndex]);
+      }else if(Number.isInteger(homeOpenClassIndex) && !mergedClasses[homeOpenClassIndex]){
         homeOpenClassIndex = null;
       }
       if(options.preserveScroll !== false && typeof renderHomePagePreservingScroll === 'function') renderHomePagePreservingScroll();
@@ -408,24 +420,31 @@
 
   window.loadArchivedHomeClassroomsFromSupabase = async function loadArchivedHomeClassroomsFromSupabase(){
     const sync = homeClassroomSync();
-    if(!sync?.loadArchivedClassrooms) return false;
     const key = homeClassroomUserKey();
+    if(!sync?.loadArchivedClassrooms){
+      homeArchivedClassroomsLoadAttemptedForKey = key;
+      if(typeof renderClassroomArchivePage === 'function') renderClassroomArchivePage();
+      return false;
+    }
     if(homeArchivedClassroomsLoadedForKey === key || homeArchivedClassroomsLoadingForKey === key) return false;
     homeArchivedClassroomsLoadingForKey = key;
+    if(typeof renderClassroomArchivePage === 'function') renderClassroomArchivePage();
     try{
       const archived = await sync.loadArchivedClassrooms();
-      if(!Array.isArray(archived)) return false;
+      if(!Array.isArray(archived)){homeArchivedClassroomsLoadAttemptedForKey=key;return false;}
       const activeClasses = getHomeClasses().filter(cls=>!cls?.archived);
       saveHomeClasses(activeClasses.concat(archived.map(cls=>({ ...cls, archived:true }))));
       homeArchivedClassroomsLoadedForKey = key;
-      if(typeof renderClassroomArchivePage === 'function') renderClassroomArchivePage();
+      homeArchivedClassroomsLoadAttemptedForKey = key;
       return true;
     }catch(err){
       console.warn('Could not load archived classrooms from Supabase:', err);
+      homeArchivedClassroomsLoadAttemptedForKey = key;
       homeToast(err?.message || 'Could not load archived classrooms.', true);
       return false;
     }finally{
       if(homeArchivedClassroomsLoadingForKey === key) homeArchivedClassroomsLoadingForKey = '';
+      if(typeof renderClassroomArchivePage === 'function') renderClassroomArchivePage();
     }
   };
 
@@ -942,6 +961,12 @@
     if(!root) return;
     const classes = getHomeClasses();
     const visibleClasses = homeVisibleClasses(classes);
+    const classroomSyncKey = homeClassroomUserKey();
+    const classroomSyncAvailable = Boolean(homeClassroomSync()?.loadClassrooms);
+    const classroomsInitialLoadPending = classroomSyncAvailable
+      && visibleClasses.length === 0
+      && homeClassroomsLoadedForKey !== classroomSyncKey
+      && homeClassroomsLoadAttemptedForKey !== classroomSyncKey;
     syncHomeTodoRealtime(visibleClasses);
     const selectedClass = Number.isInteger(homeOpenClassIndex) ? classes[homeOpenClassIndex] : null;
     const openClass = selectedClass && !selectedClass.archived && homeCanSeeClass(selectedClass) ? selectedClass : null;
@@ -953,10 +978,12 @@
             <section class="home-classroom-panel">
               <div class="home-classroom-head">
                 <h1>${homeEsc(homeClassroomHeading())}</h1>
-                <span class="home-class-count">${visibleClasses.length} ${visibleClasses.length === 1 ? 'class' : 'classes'}</span>
+                ${classroomsInitialLoadPending
+                  ? '<span class="home-class-count-loading" aria-hidden="true"></span>'
+                  : `<span class="home-class-count">${visibleClasses.length} ${visibleClasses.length === 1 ? 'class' : 'classes'}</span>`}
               </div>
               ${renderHomeStudentTodoList(visibleClasses)}
-              ${visibleClasses.length ? renderHomeClassGrid(visibleClasses) : renderHomeEmpty()}
+              ${visibleClasses.length ? renderHomeClassGrid(visibleClasses) : (classroomsInitialLoadPending ? renderHomeClassroomLoading() : renderHomeEmpty())}
             </section>
           </main>
         </div>
@@ -969,6 +996,12 @@
     const date = value ? new Date(value) : null;
     if(!date || Number.isNaN(date.getTime())) return '';
     return date.toLocaleDateString('en-AU', { day:'2-digit', month:'2-digit', year:'numeric' });
+  }
+
+  function homeFormatLongDate(value){
+    const date = value instanceof Date ? value : (value ? new Date(value) : null);
+    if(!date || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-AU', { day:'numeric', month:'long', year:'numeric' });
   }
 
   function homeArchiveDeleteDate(cls){
@@ -993,25 +1026,40 @@
   function renderClassroomArchiveCard(cls,index){
     const color = resolveHomeClassColor(cls.color);
     const banner = resolveHomeClassBanner(cls.banner || cls.subject || cls.name);
-    const archivedDate = homeFormatDate(cls.archivedAt || cls.archived_at || cls.updatedAt || cls.updated_at);
-    return `<article class="home-archive-class-card">
-      <div class="home-class-cover ${String(cls.color || '').toLowerCase() === 'dark' ? 'dark' : ''}" style="background:${homeEsc(color)}">
-        <div class="home-class-cover-shape"></div>
-        <div class="home-class-cover-icon"><i class="ti ${homeEsc(banner.icon)}"></i></div>
+    const archivedDate = homeFormatLongDate(cls.archivedAt || cls.archived_at || cls.updatedAt || cls.updated_at);
+    const deleteDate = homeFormatLongDate(homeArchiveDeleteDate(cls));
+    return `<article class="home-archive-class-card" style="--home-archive-color:${homeEsc(color)}">
+      <div class="home-archive-class-accent" aria-hidden="true"></div>
+      <div class="home-archive-class-icon" aria-hidden="true">
+        <i class="ti ${homeEsc(banner.icon)}"></i>
       </div>
       <div class="home-archive-class-space">
         <div class="home-archive-class-main">
-          <h2>${homeEsc(cls.name || 'Untitled class')}</h2>
-          ${cls.yearLevel ? `<p>Year ${homeEsc(cls.yearLevel)}</p>` : ''}
-          ${archivedDate ? `<p>Archived ${homeEsc(archivedDate)}</p>` : '<p>Archived classroom</p>'}
-          <span>${homeEsc(homeArchiveCountdown(cls))}</span>
+          <div class="home-archive-class-heading">
+            <div class="home-archive-class-name">
+              <h2>${homeEsc(cls.name || 'Untitled class')}</h2>
+              ${cls.yearLevel ? `<p>Year ${homeEsc(cls.yearLevel)}</p>` : ''}
+            </div>
+            <span class="home-archive-status"><i class="ti ti-archive"></i>Archived</span>
+          </div>
+          <div class="home-archive-dates">
+            <span><i class="ti ti-calendar"></i>${archivedDate ? `Archived ${homeEsc(archivedDate)}` : 'Archived classroom'}</span>
+            <span><i class="ti ti-clock"></i>${deleteDate ? `Deletes ${homeEsc(deleteDate)}` : 'Deletes after 1 year'}</span>
+          </div>
         </div>
-        <div class="home-archive-actions">
-          <button type="button" onclick="restoreArchivedHomeClass(${index})"><i class="ti ti-restore"></i><span>Restore</span></button>
-          <button type="button" class="danger" onclick="deleteArchivedHomeClass(${index})"><i class="ti ti-trash"></i><span>Delete</span></button>
+        <div class="home-archive-class-footer">
+          <span class="home-archive-retention">${homeEsc(homeArchiveCountdown(cls))}</span>
+          <div class="home-archive-actions">
+            <button type="button" class="danger" onclick="deleteArchivedHomeClass(${index})"><i class="ti ti-trash"></i><span>Delete</span></button>
+            <button type="button" class="primary" onclick="restoreArchivedHomeClass(${index})"><i class="ti ti-restore"></i><span>Restore classroom</span></button>
+          </div>
         </div>
       </div>
     </article>`;
+  }
+
+  function renderHomeArchiveLoading(){
+    return `<div class="home-archive-loading-status" role="status"><i class="ti ti-loader-2"></i><span>Loading archived classrooms...</span></div><div class="home-archive-class-grid"><article class="home-archive-class-card home-archive-loading-card" aria-hidden="true"><div class="home-archive-class-accent"></div><div class="home-archive-loading-icon"></div><div class="home-archive-loading-space"><span class="home-archive-loading-line title"></span><span class="home-archive-loading-line detail"></span><div class="home-archive-loading-meta"><span></span><span></span></div><div class="home-archive-loading-divider"></div><div class="home-archive-loading-actions"><span></span><span></span></div></div></article></div>`;
   }
 
   window.renderClassroomArchivePage = function renderClassroomArchivePage(){
@@ -1019,29 +1067,30 @@
     if(!root) return;
     const classes = getHomeClasses();
     const archivedClasses = classes.map((cls,index)=>({ ...cls, __homeClassIndex:index })).filter(cls=>cls?.archived && homeCanSeeClass(cls));
+    const syncKey = homeClassroomUserKey();
+    const canLoadArchive = !!homeClassroomSync()?.loadArchivedClassrooms;
+    const archiveSettled = homeArchivedClassroomsLoadedForKey === syncKey || homeArchivedClassroomsLoadAttemptedForKey === syncKey;
+    const archiveLoading = canLoadArchive && !archiveSettled;
+    const countHtml = archiveLoading ? '<span class="home-class-count home-archive-count-loading" aria-hidden="true"></span>' : `<span class="home-class-count">${archivedClasses.length} ${archivedClasses.length === 1 ? 'archived class' : 'archived classes'}</span>`;
+    const archiveContent = archiveLoading ? renderHomeArchiveLoading() : archivedClasses.length ? `<div class="home-archive-class-grid">${archivedClasses.map(cls=>renderClassroomArchiveCard(cls,cls.__homeClassIndex)).join('')}</div>` : `<div class="home-empty"><i class="ti ti-archive"></i><h2>No archived classrooms</h2><p>Archived classrooms will appear here.</p></div>`;
     root.innerHTML = `<div class="home-root">
       <div class="home-body">
         <main class="home-classroom-wrap">
           <section class="home-classroom-panel">
             <div class="home-classroom-head">
               <h1>Classroom Archive</h1>
-              <span class="home-class-count">${archivedClasses.length} ${archivedClasses.length === 1 ? 'archived class' : 'archived classes'}</span>
+              ${countHtml}
             </div>
             <div class="home-archive-note">
               Archived classrooms stay here for 1 year, then are automatically deleted with their related classroom data.
             </div>
-            ${archivedClasses.length ? `<div class="home-archive-class-grid">${archivedClasses.map(cls=>renderClassroomArchiveCard(cls,cls.__homeClassIndex)).join('')}</div>` : `<div class="home-empty">
-              <i class="ti ti-archive"></i>
-              <h2>No archived classrooms</h2>
-              <p>Archived classrooms will appear here.</p>
-            </div>`}
+            ${archiveContent}
           </section>
         </main>
       </div>
     </div>`;
     renderGlobalTopbar();
-    const syncKey = homeClassroomUserKey();
-    if(homeArchivedClassroomsLoadedForKey !== syncKey && homeArchivedClassroomsLoadingForKey !== syncKey){
+    if(!archiveSettled && homeArchivedClassroomsLoadingForKey !== syncKey){
       setTimeout(()=>window.loadArchivedHomeClassroomsFromSupabase?.(), 0);
     }
   };
@@ -1053,6 +1102,18 @@
         <h2>No classes yet</h2>
         <p>Create your first class to start organising lessons, quizzes, and question-bank activities.</p>
       </div>`;
+  }
+
+  function renderHomeClassroomLoading(){
+    const cards = Array.from({ length:3 },()=>`
+      <article class="home-class-loading-card" aria-hidden="true">
+        <div class="home-class-loading-cover"></div>
+        <div class="home-class-loading-space">
+          <span class="home-class-loading-line title"></span>
+          <span class="home-class-loading-line detail"></span>
+        </div>
+      </article>`).join('');
+    return `<div class="home-class-loading-grid" role="status" aria-label="Loading classrooms">${cards}</div>`;
   }
 
   function homeStudentKey(student,index){
@@ -1372,9 +1433,14 @@
     return preferred.concat(remaining);
   };
 
-  window.closeHomeClassroom = function closeHomeClassroom(){
+  window.resetHomeClassroomView = function resetHomeClassroomView(){
     homeOpenClassIndex = null;
     homeClassSettingsOpen = null;
+    homeClassTab = 'home';
+  };
+
+  window.closeHomeClassroom = function closeHomeClassroom(){
+    window.resetHomeClassroomView();
     renderHomePage();
   };
 
@@ -1456,6 +1522,7 @@
     saveHomeClasses(classes);
     homeClassSettingsOpen = null;
     homeArchivedClassroomsLoadedForKey = '';
+    homeArchivedClassroomsLoadAttemptedForKey = '';
     if(homeOpenClassIndex === index) homeOpenClassIndex = null;
     renderHomePage();
     homeToast('Classroom archived.');
@@ -1708,11 +1775,10 @@
     homeToast('Left classroom.');
   };
 
-  window.restoreArchivedHomeClass = async function restoreArchivedHomeClass(archiveIndex){
+  window.restoreArchivedHomeClass = async function restoreArchivedHomeClass(classIndex){
     const classes = getHomeClasses();
-    const archivedClasses = classes.filter(cls=>cls?.archived);
-    const cls = archivedClasses[archiveIndex];
-    if(!cls) return;
+    const cls = classes[classIndex];
+    if(!cls?.archived || !homeCanSeeClass(cls)) return;
     const sync = homeClassroomSync();
     if(sync?.restoreClassroom && cls?.id){
       try{
@@ -1723,21 +1789,20 @@
         return;
       }
     }
-    const classIndex = classes.findIndex(item=>homeClassroomMatchKey(item,0) === homeClassroomMatchKey(cls,0));
-    if(classIndex >= 0) classes[classIndex] = { ...classes[classIndex], archived:false, archivedAt:'' };
+    classes[classIndex] = { ...classes[classIndex], archived:false, archivedAt:'' };
     saveHomeClasses(classes);
     homeClassroomsLoadedForKey = '';
     homeArchivedClassroomsLoadedForKey = '';
+    homeArchivedClassroomsLoadAttemptedForKey = '';
     renderClassroomArchivePage();
     homeToast('Classroom restored.');
   };
 
-  window.deleteArchivedHomeClass = async function deleteArchivedHomeClass(archiveIndex){
+  window.deleteArchivedHomeClass = async function deleteArchivedHomeClass(classIndex){
     if(!confirm('Delete this archived classroom permanently?')) return;
     const classes = getHomeClasses();
-    const archivedClasses = classes.filter(cls=>cls?.archived);
-    const cls = archivedClasses[archiveIndex];
-    if(!cls) return;
+    const cls = classes[classIndex];
+    if(!cls?.archived || !homeCanSeeClass(cls)) return;
     const sync = homeClassroomSync();
     if(sync?.deleteClassroom && cls?.id){
       try{
@@ -1748,10 +1813,10 @@
         return;
       }
     }
-    const classIndex = classes.findIndex(item=>homeClassroomMatchKey(item,0) === homeClassroomMatchKey(cls,0));
-    if(classIndex >= 0) classes.splice(classIndex, 1);
+    classes.splice(classIndex, 1);
     saveHomeClasses(classes);
     homeArchivedClassroomsLoadedForKey = '';
+    homeArchivedClassroomsLoadAttemptedForKey = '';
     renderClassroomArchivePage();
     homeToast('Archived classroom deleted.');
   };

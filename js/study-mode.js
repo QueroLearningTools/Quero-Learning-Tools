@@ -57,8 +57,9 @@
     return [...new Set(split.map(v=>v.trim()).filter(Boolean))];
   }
   function allQuestions(){
-    try{if(Array.isArray(questions))return questions.map(q=>typeof normalizeQuestion==='function'?normalizeQuestion(q):q);}catch(err){}
-    return Array.isArray(window.questions)?window.questions:[];
+    try{if(Array.isArray(questions)){const rows=questions.map(q=>typeof normalizeQuestion==='function'?normalizeQuestion(q):q);return typeof usableQuestions==='function'?usableQuestions(rows):rows;}}catch(err){}
+    const rows=Array.isArray(window.questions)?window.questions:[];
+    return typeof usableQuestions==='function'?usableQuestions(rows):rows;
   }
   function currentLearningArea(){
     try{return activeCurriculumLearningArea();}catch(err){return 'Mathematics';}
@@ -97,7 +98,6 @@
   function subjectOptions(){
     let values=[];
     try{values=examSubjectValues(currentLearningArea());}catch(err){}
-    values=values.concat(allQuestions().flatMap(q=>dataArray(q.subjects||q.subject||q.mainArea,'subjects')));
     values=unique(values).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
     let classroomSubjects=[];
     try{classroomSubjects=window.getHomeClassroomSubjects?.()||[];}catch(err){}
@@ -111,14 +111,12 @@
   function topicOptions(){
     let values=[];
     try{values=curriculumTopics(currentLearningArea()).filter(curriculumTopicMatchesStudyScope);}catch(err){}
-    values=values.concat(allQuestions().filter(q=>questionMatchesOptionScope(q)).flatMap(q=>dataArray(q.topics||q.topic,'topics')));
     return unique(values);
   }
   function subtopicOptions(){
     let values=[];
     const topics=studyState.topic?[studyState.topic]:topicOptions();
     topics.forEach(topic=>{try{values=values.concat((curriculumSubtopics(topic,currentLearningArea())||[]).filter(subtopic=>curriculumSubtopicMatchesStudyScope(topic,subtopic)));}catch(err){}});
-    values=values.concat(allQuestions().filter(q=>questionMatchesOptionScope(q,{topic:true})).flatMap(q=>dataArray(q.subtopics||q.subtopic,'subtopics')));
     return unique(values);
   }
   function skillOptions(){
@@ -128,7 +126,6 @@
     topics.forEach(topic=>subs.forEach(subtopic=>{
       values=values.concat(safeCurriculumSkills(topic,subtopic).filter(curriculumLinkMatchesStudyScope).map(link=>link.skill));
     }));
-    values=values.concat(allQuestions().filter(q=>questionMatchesOptionScope(q,{topic:true,subtopic:true})).flatMap(q=>dataArray(q.skills,'skills')));
     return unique(values);
   }
   function questionValues(q,fields,field=''){
@@ -691,22 +688,61 @@ function studyMultipleReportSource(q,subQuestions){
       ${contentBlocksHtml(q,'shared')}
       <div class="study-internal-stack">${internalHtml}</div>    </article>`;
   }
+  function studyRomanNumeral(value){
+    const numerals=[['m',1000],['cm',900],['d',500],['cd',400],['c',100],['xc',90],['l',50],['xl',40],['x',10],['ix',9],['v',5],['iv',4],['i',1]];
+    let number=Math.max(1,Number(value)||1);
+    return numerals.reduce((result,[symbol,amount])=>{
+      while(number>=amount){result+=symbol;number-=amount;}
+      return result;
+    },'');
+  }
+  function studyWrittenMarkLabel(item){
+    const marks=Math.max(0,Number(item?.marks)||0);
+    return marks?`${marks} mark${marks===1?'':'s'}`:'';
+  }
+  function studyWrittenPromptHtml(item,label){
+    const text=showTextHtml(item?.textHtml,item?.text);
+    return `${text?`<div class="study-written-text">${text}</div>`:''}${contentBlocksHtml(item||{},label)}`;
+  }
+  function studyWrittenResponse(item,extraClass=''){
+    const answerMode=studySolutionActive();
+    const response=typeof examSaerResponseHtml==='function'
+      ?examSaerResponseHtml(item||{},answerMode)
+      :'';
+    return response?`<div class="study-written-response-area ${extraClass}">${response}</div>`:'';
+  }
+  function renderStudyWrittenUnit(item,label,level,options={}){
+    const prompt=studyWrittenPromptHtml(item,level==='part'?'part':'subpart');
+    const combined=options.partLabel&&options.subpartLabel;
+    const labelHtml=combined
+      ?`<strong class="study-written-label study-written-combined-label"><span>${options.partLabel}</span><span>${options.subpartLabel}</span></strong>`
+      :`<strong class="study-written-label">${label}</strong>`;
+    const classes=['study-written-unit',level==='part'?'study-written-part-unit':'study-written-subpart-unit',combined?'study-written-combined-unit':''].filter(Boolean).join(' ');
+    const response=options.response===false?'':studyWrittenResponse(item);
+    return `<section class="${classes}"><div class="study-written-row">${labelHtml}<div class="study-written-content">${prompt}</div><span class="study-written-marks">${studyWrittenMarkLabel(item)}</span></div>${response}</section>`;
+  }
   function renderWrittenParts(parts){
     if(!Array.isArray(parts)||!parts.length)return '';
     return `<div class="study-written-parts">${parts.map((part,pi)=>{
-      const label=String.fromCharCode(97+pi)+'.';
-      const partText=showTextHtml(part.textHtml,part.text);
+      const partLabel=String.fromCharCode(97+pi)+'.';
       const subs=Array.isArray(part.subparts)?part.subparts:[];
-      return `<section class="study-written-part"><div class="study-part-line"><strong>${label}</strong><span>${partText}</span></div>${contentBlocksHtml(part,'part')}${subs.map((sub,si)=>`<div class="study-subpart"><strong>${['i','ii','iii','iv','v','vi'][si]||si+1}.</strong><span>${showTextHtml(sub.textHtml,sub.text)}</span>${contentBlocksHtml(sub,'subpart')}<textarea placeholder="Type your working here..."></textarea></div>`).join('')}<textarea placeholder="Type your answer here..."></textarea></section>`;
+      if(!subs.length)return `<section class="study-written-part">${renderStudyWrittenUnit(part,partLabel,'part')}</section>`;
+      const partPrompt=studyWrittenPromptHtml(part,'part');
+      if(!partPrompt){
+        const [firstSub,...remainingSubs]=subs;
+        return `<section class="study-written-part"><div class="study-written-subparts">${renderStudyWrittenUnit(firstSub,'','subpart',{partLabel,subpartLabel:`${studyRomanNumeral(1)}.`})}${remainingSubs.map((sub,si)=>renderStudyWrittenUnit(sub,`${studyRomanNumeral(si+2)}.`,'subpart')).join('')}</div></section>`;
+      }
+      return `<section class="study-written-part">${renderStudyWrittenUnit(part,partLabel,'part',{response:false})}<div class="study-written-subparts">${subs.map((sub,si)=>renderStudyWrittenUnit(sub,`${studyRomanNumeral(si+1)}.`,'subpart')).join('')}</div></section>`;
     }).join('')}</div>`;
   }
   function renderWritten(q,index){
-    return `<article class="study-question-card study-written-card">
+    const writtenText=questionText(q);
+    return `<article class="study-question-card study-written-card${studySolutionActive()?' exam-answer-layout':''}">
       <div class="study-card-head"><div><h2>Question ${index+1} <span>(${studyMarkLabel(q)})</span></h2></div><span class="study-question-meta" style="font-weight:400">${studyQuestionMeta(q,index+1)}</span></div>
-      <div class="study-question-text">${questionText(q)}</div>
+      ${writtenText?`<div class="study-question-text">${writtenText}</div>`:''}
       ${contentBlocksHtml(q,'main')}
       ${renderWrittenParts(q.parts)}
-      ${(!q.parts||!q.parts.length)?'<textarea class="study-written-answer" placeholder="Type your working here..."></textarea>':''}
+      ${(!q.parts||!q.parts.length)?studyWrittenResponse(q,'study-written-standalone-response'):''}
     </article>`;
   }
   function hasRequiredStudyFocus(){
@@ -755,7 +791,7 @@ function studyMultipleReportSource(q,subQuestions){
     const block=blocks[studyState.currentIndex];
     if(studyState.timerChecked&&studyState.learningTab==='report')return renderStudyReportScreen(blocks);
     if(studyState.timerChecked&&studyState.learningTab==='learn')return renderStudyLearnScreen(blocks);
-    const q=block.q;
+    const q=block.q,writtenQuestion=q.type==='sa'||q.type==='er';
     const html=(q.type==='mc'&&q.template==='multiple')?renderMultiple(q,block.i,block.startNumber):(q.type==='sa'||q.type==='er')?renderWritten(q,block.startNumber-1):renderMcq(q,block.startNumber-1);
     const zoom=Math.max(70,Math.min(150,Number(studyState.zoom)||100));
     return `<div class="study-question-scale" style="zoom:${zoom/100};">
@@ -765,7 +801,7 @@ function studyMultipleReportSource(q,subQuestions){
       <button type="button" onclick="studyModePrevious()" ${studyState.currentIndex<=0?'disabled':''}><i class="ti ti-chevron-left"></i> Previous</button>
       <div class="study-progress-label">Question ${block.endNumber||block.startNumber} of ${studyTotalQuestionCount(blocks)}</div>
       <div class="study-nav-actions">
-        <button type="button" onclick="studyModeCheckAnswer()" ${blockHasSelectedAnswer(block)?'':'disabled'}>Check</button>
+        <button type="button" onclick="studyModeCheckAnswer()" ${writtenQuestion||blockHasSelectedAnswer(block)?'':'disabled'}>Check</button>
         <button type="button" onclick="studyModeNext()" ${studyState.currentIndex>=blocks.length-1?'disabled':''}>Next <i class="ti ti-chevron-right"></i></button>
       </div>
     </nav>`;
@@ -848,6 +884,8 @@ function studyMultipleReportSource(q,subQuestions){
     const body=screen.querySelector('.study-mode-body');
     if(!body)return;
     ensureStudyTimer();
+    const activeBlock=currentStudyBlock();
+    if(activeBlock&&['sa','er'].includes(activeBlock.q?.type)&&!studyState.timerChecked)stopStudyTimer();
     const topbar=screen.querySelector('.study-mode-topbar');
     if(topbar)topbar.innerHTML=renderStudyHeader();
     body.classList.toggle('filters-collapsed',!!studyState.filtersHidden);
@@ -856,7 +894,7 @@ function studyMultipleReportSource(q,subQuestions){
     body.classList.add('learning-collapsed');
     body.classList.remove('learning-expanded');
     body.innerHTML=`${renderStudySidebar()}<main class="study-practice-area">${renderResults()}</main>${renderStudyLearningSidebar()}`;
-    try{renderAllTextBoxKatex(body);}catch(err){try{renderKatexIn(body);}catch(e){}}
+    try{if(typeof renderKatexIn==='function')renderKatexIn(body);}catch(err){}
     applyStudyImageScale(body);
   }
 
@@ -917,6 +955,9 @@ function studyMultipleReportSource(q,subQuestions){
     screen.hidden=false;
     screen.classList.add('open');
     document.body.classList.add('study-mode-active');
+    if((currentRole==='student'||currentRole==='s_student')&&typeof loadQuestionsFromSupabase==='function'&&(!Array.isArray(questions)||!questions.length)){
+      await loadQuestionsFromSupabase();
+    }
     renderStudyMode();
     if(screen.requestFullscreen&&document.fullscreenElement!==screen){
       try{await screen.requestFullscreen();}

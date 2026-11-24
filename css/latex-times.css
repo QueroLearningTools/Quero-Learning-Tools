@@ -1,0 +1,234 @@
+/* Match every activity equation path to the Times New Roman question typography. */
+#app .bf-equation .katex,
+#app .bf-equation .katex *,
+#app .study-question-text .katex,
+#app .study-question-text .katex *,
+#app .study-option-body .katex,
+#app .study-option-body .katex *,
+#app .quero-practice-question-text .katex,
+#app .quero-practice-question-text .katex *,
+#app .quero-practice-option-body .katex,
+#app .quero-practice-option-body .katex *,
+#app .live-quiz-question-text .katex,
+#app .live-quiz-question-text .katex *,
+#app .live-quiz-option>strong+span .katex,
+#app .live-quiz-option>strong+span .katex *,
+#app .live-quiz-review-dialog .katex,
+#app .live-quiz-review-dialog .katex *{
+  font-family:"Times New Roman",Times,serif!important;
+}
+
+/* Older questions store equations as semantic HTML instead of KaTeX nodes. */
+#app .study-question-text,
+#app .study-question-text :not(.katex):not(.katex *),
+#app .study-option-body,
+#app .study-option-body :not(.katex):not(.katex *),
+#app .quero-practice-question-text,
+#app .quero-practice-question-text :not(.katex):not(.katex *),
+#app .quero-practice-option-body,
+#app .quero-practice-option-body :not(.katex):not(.katex *),
+#app .live-quiz-question-text,
+#app .live-quiz-question-text :not(.katex):not(.katex *),
+#app .live-quiz-option>strong+span,
+#app .live-quiz-option>strong+span :not(.katex):not(.katex *),
+#app .live-quiz-review-option>div,
+#app .live-quiz-review-option>div :not(.katex):not(.katex *){
+  font-family:"Times New Roman",Times,serif!important;
+}
+
+#app .bf-equation .katex .mathnormal,
+#app .bf-equation .katex .mathit{font-style:italic!important}
+#app .bf-equation .katex .mathrm,
+#app .bf-equation .katex .text,
+#app .bf-equation .katex .operatorname{font-style:normal!important}
+
+/* The Question Bank and Exam Builder previously gave KaTeX's bundled fonts
+   higher-specificity rules. Keep their layout engine, but render ordinary
+   letters, words, and numerals with the same Times face as the question. */
+#app #view-bank .bf-equation .katex,
+#app #view-bank .bf-equation .katex .mord,
+#app #view-bank .bf-equation .katex .mop,
+#app #view-bank .bf-equation .katex .mbin,
+#app #view-bank .bf-equation .katex .mrel,
+#app #view-bank .bf-equation .katex .mopen,
+#app #view-bank .bf-equation .katex .mclose,
+#app #view-bank .bf-equation .katex .mpunct,
+#app #view-bank .bf-equation .katex .mathrm,
+#app #view-bank .bf-equation .katex .text,
+#app #view-bank .bf-equation .katex .operatorname,
+#app #view-builder .bf-equation .katex,
+#app #view-builder .bf-equation .katex .mord,
+#app #view-builder .bf-equation .katex .mop,
+#app #view-builder .bf-equation .katex .mbin,
+#app #view-builder .bf-equation .katex .mrel,
+#app #view-builder .bf-equation .katex .mopen,
+#app #view-builder .bf-equation .katex .mclose,
+#app #view-builder .bf-equation .katex .mpunct,
+#app #view-builder .bf-equation .katex .mathrm,
+#app #view-builder .bf-equation .katex .text,
+#app #view-builder .bf-equation .katex .operatorname{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:normal;
+}
+
+#app #view-bank .bf-equation .katex .mathnormal,
+#app #view-bank .bf-equation .katex .mathit,
+#app #view-bank .bf-equation .katex .textit,
+#app #view-builder .bf-equation .katex .mathnormal,
+#app #view-builder .bf-equation .katex .mathit,
+#app #view-builder .bf-equation .katex .textit,
+#app .study-question-text .katex .mathnormal,
+#app .study-question-text .katex .mathit,
+#app .study-question-text .katex .textit,
+#app .study-option-body .katex .mathnormal,
+#app .study-option-body .katex .mathit,
+#app .study-option-body .katex .textit,
+#app .quero-practice-question-text .katex .mathnormal,
+#app .quero-practice-question-text .katex .mathit,
+#app .quero-practice-question-text .katex .textit,
+#app .quero-practice-option-body .katex .mathnormal,
+#app .quero-practice-option-body .katex .mathit,
+#app .quero-practice-option-body .katex .textit,
+#app .live-quiz-question-text .katex .mathnormal,
+#app .live-quiz-question-text .katex .mathit,
+#app .live-quiz-question-text .katex .textit,
+#app .live-quiz-option .katex .mathnormal,
+#app .live-quiz-option .katex .mathit,
+#app .live-quiz-option .katex .textit{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:italic!important;
+}
+
+#app #view-bank .bf-equation .katex .mathbf,
+#app #view-builder .bf-equation .katex .mathbf{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:normal;
+  font-weight:700;
+}
+
+/* Question equations inherit the full surrounding question-text size. */
+#app .study-question-scale .bf-equation .katex,
+#app .study-question-text .katex,
+#app .live-quiz-content .bf-equation .katex,
+#app .live-quiz-question-text .katex,
+#app .live-quiz-review-dialog .bf-equation .katex,
+#app .quero-practice-question-scale .bf-equation .katex{
+  font-size:1em!important;
+  line-height:1;
+}
+
+/* Answer-choice equations use the full surrounding option-text size. */
+#app .study-option-body .bf-equation .katex,
+#app .study-option-body .katex,
+#app .quero-practice-option-body .bf-equation .katex,
+#app .quero-practice-option-body .katex,
+#app .live-quiz-option>strong+span .bf-equation .katex,
+#app .live-quiz-option>strong+span .katex,
+#app .live-quiz-review-option>div .bf-equation .katex{
+  font-size:1em!important;
+}
+
+/* Keep KaTeX's size-specific glyphs for stretchy delimiters and large operators. */
+#app .katex .delimsizing.size1{font-family:KaTeX_Size1!important}
+#app .katex .delimsizing.size2{font-family:KaTeX_Size2!important}
+#app .katex .delimsizing.size3{font-family:KaTeX_Size3!important}
+#app .katex .delimsizing.size4{font-family:KaTeX_Size4!important}
+#app .katex .delimsizing.mult .delim-size1,
+#app .katex .delimsizing.mult .delim-size1>span{font-family:KaTeX_Size1!important}
+#app .katex .delimsizing.mult .delim-size4,
+#app .katex .delimsizing.mult .delim-size4>span{font-family:KaTeX_Size4!important}
+#app .katex .op-symbol.large-op{font-family:KaTeX_Size2!important}
+#app .katex .op-symbol.small-op{font-family:KaTeX_Size1!important}
+
+/* Full-screen activity views are mounted beside #app, directly under body. */
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex *{
+  font-family:"Times New Roman",Times,serif!important;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .study-question-text,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .study-option-body,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .quero-practice-question-text,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .quero-practice-option-body,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-question-text,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-option>strong+span,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-review-option>div{
+  font-family:"Times New Roman",Times,serif!important;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .mathnormal,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .mathit,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .textit{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:italic!important;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .mathrm,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .text,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .operatorname{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:normal!important;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .study-question-text .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-question-text .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-review-dialog .bf-equation .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .quero-practice-question-text .katex{
+  font-size:1em!important;
+  line-height:1;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .study-option-body .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .quero-practice-option-body .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-option>strong+span .katex,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .live-quiz-review-option>div .katex{
+  font-size:1em!important;
+}
+
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.size1{font-family:KaTeX_Size1!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.size2{font-family:KaTeX_Size2!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.size3{font-family:KaTeX_Size3!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.size4{font-family:KaTeX_Size4!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.mult .delim-size1,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.mult .delim-size1>span{font-family:KaTeX_Size1!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.mult .delim-size4,
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .delimsizing.mult .delim-size4>span{font-family:KaTeX_Size4!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .op-symbol.large-op{font-family:KaTeX_Size2!important}
+:is(#study-mode-screen,#quero-practice-root,#live-quiz-screen) .katex .op-symbol.small-op{font-family:KaTeX_Size1!important}
+
+/* My Papers creates its print pages beside #app, so mirror the Exam Builder
+   equation typography in that detached print root as well. */
+.saved-paper-print-root .bf-equation .katex,
+.saved-paper-print-root .bf-equation .katex *{
+  font-family:"Times New Roman",Times,serif!important;
+}
+
+.saved-paper-print-root .bf-equation .katex{
+  font-size:1em!important;
+  line-height:1.2;
+}
+
+.saved-paper-print-root .bf-equation .katex .mathnormal,
+.saved-paper-print-root .bf-equation .katex .mathit,
+.saved-paper-print-root .bf-equation .katex .textit{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:italic!important;
+}
+
+.saved-paper-print-root .bf-equation .katex .mathrm,
+.saved-paper-print-root .bf-equation .katex .text,
+.saved-paper-print-root .bf-equation .katex .operatorname{
+  font-family:"Times New Roman",Times,serif!important;
+  font-style:normal!important;
+}
+
+.saved-paper-print-root .katex .delimsizing.size1{font-family:KaTeX_Size1!important}
+.saved-paper-print-root .katex .delimsizing.size2{font-family:KaTeX_Size2!important}
+.saved-paper-print-root .katex .delimsizing.size3{font-family:KaTeX_Size3!important}
+.saved-paper-print-root .katex .delimsizing.size4{font-family:KaTeX_Size4!important}
+.saved-paper-print-root .katex .delimsizing.mult .delim-size1,
+.saved-paper-print-root .katex .delimsizing.mult .delim-size1>span{font-family:KaTeX_Size1!important}
+.saved-paper-print-root .katex .delimsizing.mult .delim-size4,
+.saved-paper-print-root .katex .delimsizing.mult .delim-size4>span{font-family:KaTeX_Size4!important}
+.saved-paper-print-root .katex .op-symbol.large-op{font-family:KaTeX_Size2!important}
+.saved-paper-print-root .katex .op-symbol.small-op{font-family:KaTeX_Size1!important}

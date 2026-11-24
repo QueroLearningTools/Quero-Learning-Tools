@@ -38,8 +38,7 @@
             ${studentMode
               ? `<button type="button" onclick="leaveHomeClass(${classIndex}, event)"><i class="ti ti-logout-2"></i><span>Leave</span></button>`
               : `<button type="button" onclick="openEditHomeClassModal(${classIndex}, event)"><i class="ti ti-pencil"></i><span>Edit</span></button>
-                <button type="button" onclick="archiveHomeClass(${classIndex}, event)"><i class="ti ti-archive"></i><span>Archive</span></button>
-                <button type="button" onclick="deleteHomeClass(${classIndex}, event)"><i class="ti ti-trash"></i><span>Delete</span></button>`}
+                <button type="button" onclick="archiveHomeClass(${classIndex}, event)"><i class="ti ti-archive"></i><span>Archive</span></button>`}
           </div>` : ''}
         </div>
         <div class="home-class-space">
@@ -753,6 +752,43 @@
     return classroomPracticeUnique(classroomPracticeLinks(cls,{topic,subtopic}),'skill','skillOrder');
   }
 
+  function classroomPracticeLinkKey(link){
+    return ['topic','subtopic','skill'].map(field=>String(link?.[field]||'').trim().toLowerCase()).join('\u001f');
+  }
+
+  function classroomAvailablePracticeLinks(cls,excludeTaskId=''){
+    const tracker=classroomTracker(cls);
+    const links=classroomPracticeLinks(cls);
+    const assignedSkillLinks=new Set();
+    classroomTrackerTerms().forEach(([termKey])=>{
+      (tracker[termKey]?.tasks||[]).forEach(task=>{
+        if(task?.type!=='practice'||String(task.id||'')===String(excludeTaskId||''))return;
+        const topics=classroomTaskValues(task.topic);
+        const subtopics=classroomTaskValues(task.subtopic);
+        const skills=classroomTaskValues(task.skill);
+        if(!skills.length)return;
+        links.forEach(link=>{
+          if(topics.length&&!topics.some(value=>classroomSameValue(value,link.topic)))return;
+          if(subtopics.length&&!subtopics.some(value=>classroomSameValue(value,link.subtopic)))return;
+          if(!skills.some(value=>classroomSameValue(value,link.skill)))return;
+          assignedSkillLinks.add(classroomPracticeLinkKey(link));
+        });
+      });
+    });
+    return links.filter(link=>!assignedSkillLinks.has(classroomPracticeLinkKey(link)));
+  }
+
+  function classroomPracticeValuesFromLinks(links,field,orderField,{topic=[],subtopic=[]}={}){
+    const topics=classroomTaskValues(topic);
+    const subtopics=classroomTaskValues(subtopic);
+    const filtered=(links||[]).filter(link=>{
+      if(topics.length&&!topics.some(value=>classroomSameValue(value,link.topic)))return false;
+      if(subtopics.length&&!subtopics.some(value=>classroomSameValue(value,link.subtopic)))return false;
+      return true;
+    });
+    return classroomPracticeUnique(filtered,field,orderField);
+  }
+
   function trackerOptionHtml(values,selected='',emptyText='No options'){
     const clean = [...new Set((values || []).map(value=>String(value || '').trim()).filter(Boolean))];
     if(!clean.length) return `<option value="">${emptyText}</option>`;
@@ -760,30 +796,55 @@
   }
 
   function trackerPracticeSelected(field){
-    return [...document.querySelectorAll(`#home-tracker-task-${field} input[type="checkbox"]:checked`)].map(input=>input.value);
+    return [...document.querySelectorAll(`#home-tracker-task-${field} input[type="checkbox"]:checked:not([data-select-all])`)].map(input=>input.value);
   }
 
   function trackerPracticeOptionsHtml(field,options,selected,classIndex,emptyText){
     if(!options.length) return `<div class="home-tracker-practice-empty">${emptyText}</div>`;
-    return options.map(value=>`<label class="home-tracker-practice-option"><input type="checkbox" value="${classroomAttr(value)}" ${selected.includes(value) ? 'checked' : ''} onchange="updateHomeTrackerPracticeOptions(${classIndex},'${field}')"><span>${classroomAttr(value)}</span></label>`).join('');
+    const supportsSelectAll=field==='subtopic'||field==='skill';
+    const allSelected=supportsSelectAll&&options.every(value=>selected.includes(value));
+    const selectAll=supportsSelectAll?`<label class="home-tracker-practice-option home-tracker-practice-select-all"><input type="checkbox" data-select-all ${allSelected?'checked':''} onchange="toggleHomeTrackerPracticeAll('${field}',${classIndex},this.checked)"><span>Select all</span></label>`:'';
+    return selectAll+options.map(value=>`<label class="home-tracker-practice-option"><input type="checkbox" value="${classroomAttr(value)}" ${selected.includes(value) ? 'checked' : ''} onchange="updateHomeTrackerPracticeOptions(${classIndex},'${field}')"><span>${classroomAttr(value)}</span></label>`).join('');
+  }
+
+  function syncTrackerPracticeSelectAll(field){
+    const picker=document.getElementById(`home-tracker-task-${field}`);
+    const selectAll=picker?.querySelector('input[data-select-all]');
+    if(!selectAll)return;
+    const options=[...picker.querySelectorAll('input[type="checkbox"]:not([data-select-all])')];
+    const selected=options.filter(input=>input.checked).length;
+    selectAll.checked=options.length>0&&selected===options.length;
+    selectAll.indeterminate=selected>0&&selected<options.length;
   }
 
   function trackerPracticeSummary(field,selected,emptyText){
     return selected.length === 1 ? selected[0] : selected.length ? `${selected.length} selected` : emptyText || `Select ${field === 'skill' ? 'skills' : field + 's'}`;
   }
 
+  function setTrackerPracticeSummary(summary,text,title=''){
+    if(!summary)return;
+    let label=summary.querySelector('.home-tracker-practice-summary-text');
+    if(!label){
+      label=document.createElement('span');
+      label.className='home-tracker-practice-summary-text';
+      summary.replaceChildren(label);
+    }
+    label.textContent=text;
+    summary.title=title;
+  }
+
   function trackerPracticePicker(field,label,options,selected,classIndex,emptyText=''){
     const allOptions = [...new Set([...options,...selected])];
-    return `<div class="home-tracker-practice-field"><span>${label}</span><details id="home-tracker-task-${field}" class="home-tracker-practice-picker"><summary title="${classroomAttr(selected.join(', '))}">${classroomAttr(trackerPracticeSummary(field,selected,emptyText))}</summary><div class="home-tracker-practice-menu">${trackerPracticeOptionsHtml(field,allOptions,selected,classIndex,emptyText || 'No options')}</div></details></div>`;
+    return `<div class="home-tracker-practice-field"><span>${label}</span><details id="home-tracker-task-${field}" class="home-tracker-practice-picker"><summary title="${classroomAttr(selected.join(', '))}"><span class="home-tracker-practice-summary-text">${classroomAttr(trackerPracticeSummary(field,selected,emptyText))}</span></summary><div class="home-tracker-practice-menu">${trackerPracticeOptionsHtml(field,allOptions,selected,classIndex,emptyText || 'No options')}</div></details></div>`;
   }
 
   function syncTrackerPracticePicker(field,options,selected,classIndex,emptyText=''){
     const picker = document.getElementById(`home-tracker-task-${field}`);
     if(!picker) return;
     const summary = picker.querySelector('summary');
-    summary.textContent = trackerPracticeSummary(field,selected,emptyText);
-    summary.title = selected.join(', ');
+    setTrackerPracticeSummary(summary,trackerPracticeSummary(field,selected,emptyText),selected.join(', '));
     picker.querySelector('.home-tracker-practice-menu').innerHTML = trackerPracticeOptionsHtml(field,options,selected,classIndex,emptyText || 'No options');
+    syncTrackerPracticeSelectAll(field);
   }
 
   function positionTrackerPracticeMenu(picker){
@@ -791,13 +852,21 @@
     const menu = picker.querySelector('.home-tracker-practice-menu');
     if(!picker.open || !summary || !menu) return;
     const rect = summary.getBoundingClientRect();
+    const viewportPadding = 8;
+    const availableWidth = Math.max(160,window.innerWidth - viewportPadding * 2);
+    menu.style.width = 'max-content';
+    menu.style.minWidth = `${rect.width}px`;
+    menu.style.maxWidth = `${availableWidth}px`;
+    const naturalWidth = Math.max(rect.width,Math.ceil(menu.scrollWidth) + 2);
+    const menuWidth = Math.min(naturalWidth,availableWidth);
     const below = window.innerHeight - rect.bottom - 8;
     const above = rect.top - 8;
     const openAbove = below < 180 && above > below;
     const space = openAbove ? above : below;
     const maxHeight = Math.min(180,Math.max(40,space));
-    menu.style.left = `${Math.max(8,rect.left)}px`;
-    menu.style.width = `${Math.min(rect.width,window.innerWidth - 16)}px`;
+    const left = Math.min(Math.max(viewportPadding,rect.left),Math.max(viewportPadding,window.innerWidth - menuWidth - viewportPadding));
+    menu.style.left = `${left}px`;
+    menu.style.width = `${menuWidth}px`;
     menu.style.maxHeight = `${maxHeight}px`;
     menu.style.top = `${openAbove ? rect.top - Math.min(menu.scrollHeight,maxHeight) - 4 : rect.bottom + 4}px`;
   }
@@ -2100,7 +2169,7 @@
     if(classroomVassRankTeacherFilter !== 'all') rows = rows.filter(row=>row.teacher === classroomVassRankTeacherFilter);
     const indicativeHeading = (examIndex,type)=>{
       const customHeading = type === 'Score' ? indicativeExams[examIndex]?.scoreHeading : indicativeExams[examIndex]?.gradeHeading;
-      return customHeading || (indicativeCount === 1 ? `Indicative ${type}` : `Exam ${examIndex + 1} ${type}`);
+      return customHeading || (indicativeCount === 1 ? `Indicative ${type}` : `Indicative ${type} ${examIndex + 1}`);
     };
     const semesterExamHeading = examIndex=>semesterExams[examIndex]?.heading || (semesterExamCount === 1 ? 'Semester Exam' : `Semester Exam ${examIndex + 1}`);
     const studentMode = isStudentClassroomRole();
@@ -2367,7 +2436,7 @@
     const exams = classroomVassIndicativeExams(cls,cleanExamIndex + 1);
     const exam = exams[cleanExamIndex];
     const typeLabel = cleanField === 'grade' ? 'Grade' : 'Score';
-    const defaultHeading = exams.length === 1 ? `Indicative ${typeLabel}` : `Exam ${cleanExamIndex + 1} ${typeLabel}`;
+    const defaultHeading = exams.length === 1 ? `Indicative ${typeLabel}` : `Indicative ${typeLabel} ${cleanExamIndex + 1}`;
     const heading = cleanField === 'grade' ? exam.gradeHeading : exam.scoreHeading;
     const cohort = classes.filter(item=>!item?.archived && classroomSameRankCohort(cls,item));
     const semesterExamCount = Math.max(0,...cohort.map(item=>classroomVassSemesterExams(item).length));
@@ -2384,7 +2453,7 @@
         <div class="home-vass-grade-weight-table">
           <label><span>VASS (100)</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-vass" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.vass ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>
           ${Array.from({length:semesterExamCount},(_,semesterIndex)=>`<label><span>${classroomAttr(semesterHeading(semesterIndex))}</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-semester-${semesterIndex}" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.semesterExams?.[semesterIndex] ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>`).join('')}
-          <label><span>${classroomAttr((exams[cleanExamIndex]?.scoreHeading || (exams.length === 1 ? 'Indicative Score' : `Exam ${cleanExamIndex + 1} Score`)))}</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-score" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.indicativeScore ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>
+          <label><span>${classroomAttr((exams[cleanExamIndex]?.scoreHeading || (exams.length === 1 ? 'Indicative Score' : `Indicative Score ${cleanExamIndex + 1}`)))}</span><span class="home-vass-grade-weight-input"><input id="home-vass-grade-weight-score" data-vass-grade-weight type="number" min="0" max="100" step="1" value="${classroomAttr(weights.indicativeScore ?? 0)}" oninput="updateHomeVassGradeWeightTotal()"><span>%</span></span></label>
         </div>
       </section>
       <section class="home-vass-grade-section">
@@ -3167,12 +3236,13 @@
     const task = taskId ? trackerFindTask(cls,termKey,taskId) : null;
     const type = task?.type || 'score';
     const taskTypes = classroomTaskTypes();
-    const topics = classroomPracticeTopics(cls);
     const selectedTopics = classroomTaskValues(task?.topic);
-    const subtopics = classroomPracticeSubtopics(cls, selectedTopics);
     const selectedSubtopics = classroomTaskValues(task?.subtopic);
-    const skills = classroomPracticeSkills(cls, selectedTopics, selectedSubtopics);
     const selectedSkills = classroomTaskValues(task?.skill);
+    const availablePracticeLinks = classroomAvailablePracticeLinks(cls,task?.id||taskId);
+    const topics = classroomPracticeValuesFromLinks(availablePracticeLinks,'topic','topicOrder');
+    const subtopics = classroomPracticeValuesFromLinks(availablePracticeLinks,'subtopic','subtopicOrder',{topic:selectedTopics});
+    const skills = classroomPracticeValuesFromLinks(availablePracticeLinks,'skill','skillOrder',{topic:selectedTopics,subtopic:selectedSubtopics});
     window.closeHomeTrackerTaskModal();
     const shell = document.createElement('div');
     shell.id = 'home-tracker-task-modal-root';
@@ -3207,6 +3277,8 @@
         </div>
       </div>`;
     document.body.appendChild(shell);
+    syncTrackerPracticeSelectAll('subtopic');
+    syncTrackerPracticeSelectAll('skill');
     shell.querySelectorAll('.home-tracker-practice-picker').forEach(picker=>picker.addEventListener('toggle',()=>{
       if(!picker.open) return;
       closeTrackerPracticeMenus(shell,picker);
@@ -3618,30 +3690,44 @@
     document.querySelectorAll('.home-tracker-score-display-field').forEach(field=>field.classList.toggle('hidden', !(type === 'practice' && attempts > 1)));
   };
 
+  window.toggleHomeTrackerPracticeAll = function toggleHomeTrackerPracticeAll(field,classIndex,checked){
+    const picker=document.getElementById(`home-tracker-task-${field}`);
+    if(!picker)return;
+    picker.querySelectorAll('input[type="checkbox"]:not([data-select-all])').forEach(input=>{input.checked=checked;});
+    updateHomeTrackerPracticeOptions(classIndex,field);
+    syncTrackerPracticeSelectAll(field);
+  };
+
   window.updateHomeTrackerPracticeOptions = function updateHomeTrackerPracticeOptions(classIndex,changed){
     const cls = classroomClasses()[classIndex];
     if(!cls) return;
-    const topics = trackerPracticeSelected('topic');
-    const subtopicOptions = classroomPracticeSubtopics(cls,topics);
-    const subtopics = trackerPracticeSelected('subtopic').filter(value=>subtopicOptions.includes(value));
-    const skillOptions = classroomPracticeSkills(cls,topics,subtopics);
-    const skills = trackerPracticeSelected('skill').filter(value=>skillOptions.includes(value));
+    const taskId=document.getElementById('home-tracker-task-id')?.value||'';
+    const availablePracticeLinks=classroomAvailablePracticeLinks(cls,taskId);
+    const topicOptions=classroomPracticeValuesFromLinks(availablePracticeLinks,'topic','topicOrder');
+    const topics = trackerPracticeSelected('topic').filter(value=>topicOptions.some(item=>classroomSameValue(item,value)));
+    const currentSubtopics=trackerPracticeSelected('subtopic');
+    const subtopicOptions = classroomPracticeValuesFromLinks(availablePracticeLinks,'subtopic','subtopicOrder',{topic:topics});
+    const subtopics = currentSubtopics.filter(value=>subtopicOptions.some(item=>classroomSameValue(item,value)));
+    const currentSkills=trackerPracticeSelected('skill');
+    const skillOptions = classroomPracticeValuesFromLinks(availablePracticeLinks,'skill','skillOrder',{topic:topics,subtopic:subtopics});
+    const skills = currentSkills.filter(value=>skillOptions.some(item=>classroomSameValue(item,value)));
     const topicPicker = document.getElementById('home-tracker-task-topic');
     if(topicPicker){
       const summary = topicPicker.querySelector('summary');
-      summary.textContent = trackerPracticeSummary('topic',topics);
-      summary.title = topics.join(', ');
+      setTrackerPracticeSummary(summary,trackerPracticeSummary('topic',topics),topics.join(', '));
     }
     if(changed === 'topic') syncTrackerPracticePicker('subtopic',subtopicOptions,subtopics,classIndex,topics.length ? '' : 'Select topic first');
     if(changed !== 'skill') syncTrackerPracticePicker('skill',skillOptions,skills,classIndex,subtopics.length ? '' : 'Select subtopic first');
     else{
       const summary = document.querySelector('#home-tracker-task-skill summary');
-      if(summary){summary.textContent = trackerPracticeSummary('skill',skills);summary.title = skills.join(', ');}
+      setTrackerPracticeSummary(summary,trackerPracticeSummary('skill',skills),skills.join(', '));
     }
     if(changed === 'subtopic'){
       const summary = document.querySelector('#home-tracker-task-subtopic summary');
-      if(summary){summary.textContent = trackerPracticeSummary('subtopic',subtopics);summary.title = subtopics.join(', ');}
+      setTrackerPracticeSummary(summary,trackerPracticeSummary('subtopic',subtopics),subtopics.join(', '));
     }
+    syncTrackerPracticeSelectAll('subtopic');
+    syncTrackerPracticeSelectAll('skill');
   };
 
   window.addHomeTrackerOption = function addHomeTrackerOption(){

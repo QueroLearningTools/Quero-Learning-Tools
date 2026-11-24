@@ -141,6 +141,7 @@ const liveQuizState={session:null,participant:null,currentQuestion:null,optionOr
   }
   function eligibleQuestions(){
     return allQs().filter(q=>{
+      if(!liveQuizState.session&&typeof questionCanBeUsed==='function'&&!questionCanBeUsed(q))return false;
       if(q.type==='mc'&&q.template==='multiple')return false;
       return ['mc','tf'].includes(q.type)&&matchField(q,'calculator','Non-Calculator');
     });
@@ -283,7 +284,7 @@ root.innerHTML=`<header class="live-quiz-brandbar"${targetDialog?' inert aria-hi
     }));
     startTeacherHeaderTimer();
     setTimeout(()=>{
-      if(typeof renderAllTextBoxKatex==='function')renderAllTextBoxKatex(root);
+      if(typeof renderKatexIn==='function')renderKatexIn(root);
       applyLiveQuizImageScale(root);
     },0);
   }

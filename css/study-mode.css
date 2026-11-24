@@ -105,10 +105,29 @@
 .study-internal-stack{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .study-internal-question{border-top:1px solid #edf1f6;padding-top:14px}
 .study-internal-question h3{font-family:Arial,sans-serif;margin:0 0 8px;font-size:17px;line-height:1.2;color:#111827}
-.study-written-parts{display:flex;flex-direction:column;gap:16px;margin-top:12px}
-.study-part-line,.study-subpart{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;align-items:start;margin-bottom:8px}
-.study-subpart{margin-left:32px}
-.study-written-card textarea,.study-written-answer{width:100%;min-height:110px;border:1px solid #d8e0ea;border-radius:10px;padding:12px;box-sizing:border-box;font-family:'Times New Roman',Times,serif;font-size:17px;resize:vertical;margin-top:10px}
+.study-written-parts{display:flex;flex-direction:column;gap:18px;margin-top:12px}
+.study-written-part,.study-written-subparts{display:flex;flex-direction:column;gap:16px;min-width:0}
+.study-written-row{display:grid;grid-template-columns:28px minmax(0,1fr) 74px;gap:8px;align-items:start;min-width:0}
+.study-written-label{font-family:Arial,sans-serif;font-size:18px;line-height:1.25;font-weight:700}
+.study-written-content,.study-written-text{min-width:0;font-family:'Times New Roman',Times,serif;font-size:18px;line-height:1.25;color:#111827}
+.study-written-marks{font-family:Arial,sans-serif;font-size:18px;line-height:1.25;font-weight:400;text-align:right;white-space:nowrap;align-self:end}
+.study-written-subpart-unit{margin-left:32px}
+.study-written-combined-unit{margin-left:0}
+.study-written-combined-unit .study-written-row{grid-template-columns:60px minmax(0,1fr) 74px}
+.study-written-combined-label{display:grid;grid-template-columns:28px 28px;gap:4px}
+.study-written-content>.study-question-text:last-child{margin-bottom:0}
+.study-written-response-area{min-width:0;margin:10px 82px 0 36px}
+.study-written-combined-unit .study-written-response-area{margin-left:68px}
+.study-written-standalone-response{margin-left:0;margin-right:0}
+.study-written-response-area .exam-saer-response{box-sizing:border-box;position:relative;min-height:calc(var(--saer-line-count,1)*9mm);font:400 18px/9mm "Times New Roman",Times,serif}
+.study-written-response-area .exam-saer-response-rules{position:absolute;z-index:0;inset:0;display:grid;grid-template-rows:repeat(var(--saer-line-count,1),9mm);pointer-events:none}
+.study-written-response-area .exam-saer-response-rules i{box-sizing:border-box;display:block;border-bottom:1px solid #555}
+.study-written-response-area .exam-saer-response-content{position:relative;z-index:1;min-height:calc(var(--saer-line-count,1)*9mm)}
+.study-written-response-area .exam-saer-response p,.study-written-response-area .exam-saer-response div{margin:0;line-height:9mm}
+.study-written-response-area .exam-saer-answer-image{display:block;max-width:100%;height:auto;margin:3mm 0 0;border:0;outline:0;box-shadow:none}
+.study-written-response-area .exam-saer-answer-image-box{margin-top:9mm}
+.study-written-card.exam-answer-layout .exam-saer-response.exam-saer-solution .exam-saer-response-content{position:absolute;top:0;left:0;width:100%;min-height:0;transform-origin:top left}
+.study-written-card.exam-answer-layout .exam-saer-solution,.study-written-card.exam-answer-layout .exam-saer-solution *{color:#c62828!important}
 .study-bottom-nav{width:min(100%,24cm);margin:0 auto;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;border-top:1px solid #eef2f7;padding-top:12px;flex:0 0 auto}
 .study-bottom-nav button{height:44px;border:1px solid #d5dee9;border-radius:10px;background:#fff;padding:0 18px;font-size:16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:#0b0f14;white-space:nowrap}
 .study-bottom-nav button:hover{background:#f7fafc}
